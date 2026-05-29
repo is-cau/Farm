@@ -42,24 +42,14 @@
             position: absolute;
             background: rgba(255,255,255,0.4);
         }
-        #crosshair::before {
-            width: 2px;
-            height: 14px;
-            left: -1px;
-            top: -7px;
-        }
-        #crosshair::after {
-            width: 14px;
-            height: 2px;
-            left: -7px;
-            top: -1px;
-        }
+        #crosshair::before { width: 2px; height: 14px; left: -1px; top: -7px; }
+        #crosshair::after { width: 14px; height: 2px; left: -7px; top: -1px; }
     </style>
 </head>
 <body>
     <div id="hud">
         <div><span class="mode">🎥 上帝视角</span></div>
-        <div class="hint">按 <b>F</b> 切换第一人称 | 拖拽旋转 · 滚轮缩放</div>
+        <div class="hint">按 <b>F</b> 切换第一人称 | 拖拽旋转 · 滚轮缩放 · WASD 平移</div>
     </div>
     <div id="crosshair"></div>
 
@@ -80,7 +70,7 @@
         // ──────────────────────────────────
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB);
-        scene.fog = new THREE.Fog(0x87CEEB, 30, 80);
+        scene.fog = new THREE.Fog(0x87CEEB, 40, 120);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -88,22 +78,27 @@
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1.1;
+        renderer.toneMappingExposure = 1.15;
         document.body.appendChild(renderer.domElement);
 
         const camera = new THREE.PerspectiveCamera(
-            50, window.innerWidth / window.innerHeight, 0.5, 100
+            50, window.innerWidth / window.innerHeight, 0.5, 150
         );
-        camera.position.set(12, 10, 15);
+        camera.position.set(16, 12, 18);
 
         const controls = new OrbitControls(camera, renderer.domElement);
-        controls.target.set(0, 1.5, 0);
+        controls.target.set(0, 2, 0);
         controls.enableDamping = true;
         controls.dampingFactor = 0.08;
-        controls.minDistance = 5;
-        controls.maxDistance = 30;
+        controls.minDistance = 3;
+        controls.maxDistance = 50;
         controls.maxPolarAngle = Math.PI / 2 - 0.05;
-        controls.minPolarAngle = 0.2;
+        controls.minPolarAngle = 0.15;
+        controls.mouseButtons = {
+            LEFT: THREE.MOUSE.ROTATE,
+            MIDDLE: THREE.MOUSE.PAN,
+            RIGHT: THREE.MOUSE.PAN
+        };
         controls.update();
 
         // ──────────────────────────────────
@@ -112,15 +107,14 @@
         let isFirstPerson = false;
         const fpsState = {
             yaw: -Math.PI / 4,
-            pitch: -0.25,
+            pitch: -0.2,
             velocity: new THREE.Vector3(),
-            moveSpeed: 6.0,
-            eyeHeight: 1.6,
+            moveSpeed: 5.5,
+            eyeHeight: 1.3,
         };
         const keys = { w: false, a: false, s: false, d: false, shift: false };
-        const buildings = []; // populated below for collision
+        const buildings = [];
 
-        // Set initial FPS orientation from orbit camera
         function captureOrbitOrientation() {
             const dir = new THREE.Vector3();
             camera.getWorldDirection(dir);
@@ -128,7 +122,6 @@
             fpsState.pitch = Math.asin(dir.y);
         }
 
-        // HUD refs
         const hudEl = document.getElementById('hud');
         const crosshairEl = document.getElementById('crosshair');
 
@@ -139,7 +132,7 @@
                 crosshairEl.style.display = 'block';
             } else {
                 hudEl.innerHTML = '<div><span class="mode">🎥 上帝视角</span></div>'
-                    + '<div class="hint">按 <b>F</b> 切换第一人称 | 拖拽旋转 · 滚轮缩放</div>';
+                    + '<div class="hint">按 <b>F</b> 切换第一人称 | 拖拽旋转 · 滚轮缩放 · <b>WASD</b> 平移</div>';
                 crosshairEl.style.display = 'none';
             }
         }
@@ -147,29 +140,29 @@
         // ──────────────────────────────────
         // LIGHTING
         // ──────────────────────────────────
-        const ambientLight = new THREE.AmbientLight(0x6688CC, 0.6);
+        const ambientLight = new THREE.AmbientLight(0x6688CC, 0.5);
         scene.add(ambientLight);
 
-        const hemisphereLight = new THREE.HemisphereLight(0x87CEEB, 0x4A7C2E, 0.4);
+        const hemisphereLight = new THREE.HemisphereLight(0x87CEEB, 0x4A7C2E, 0.35);
         scene.add(hemisphereLight);
 
-        const sunLight = new THREE.DirectionalLight(0xFFF5E6, 3.5);
-        sunLight.position.set(10, 15, 5);
+        const sunLight = new THREE.DirectionalLight(0xFFF5E6, 4.0);
+        sunLight.position.set(15, 20, 8);
         sunLight.castShadow = true;
         sunLight.shadow.mapSize.width = 2048;
         sunLight.shadow.mapSize.height = 2048;
         sunLight.shadow.camera.near = 0.5;
-        sunLight.shadow.camera.far = 80;
-        sunLight.shadow.camera.left = -20;
-        sunLight.shadow.camera.right = 20;
-        sunLight.shadow.camera.top = 20;
-        sunLight.shadow.camera.bottom = -20;
+        sunLight.shadow.camera.far = 120;
+        sunLight.shadow.camera.left = -30;
+        sunLight.shadow.camera.right = 30;
+        sunLight.shadow.camera.top = 30;
+        sunLight.shadow.camera.bottom = -30;
         sunLight.shadow.bias = -0.0001;
         sunLight.shadow.normalBias = 0.02;
         scene.add(sunLight);
 
         // ──────────────────────────────────
-        // MATERIALS (shared)
+        // MATERIALS
         // ──────────────────────────────────
         const grassMat = new THREE.MeshStandardMaterial({ color: 0x4A7C2E, roughness: 0.9, metalness: 0.0 });
         const dirtMat = new THREE.MeshStandardMaterial({ color: 0xC4A45A, roughness: 0.95, metalness: 0.0 });
@@ -188,18 +181,26 @@
         const cloudMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF, roughness: 1.0, metalness: 0.0 });
         const houseWallMat = new THREE.MeshStandardMaterial({ color: 0xF5DEB3, roughness: 0.7, metalness: 0.0 });
         const houseRoofMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.6, metalness: 0.0 });
+        const stoneMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.5, metalness: 0.1 });
+        const ironMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.4, metalness: 0.8 });
+        const hayMat = new THREE.MeshStandardMaterial({ color: 0xDAA520, roughness: 0.85, metalness: 0.0 });
+        const whiteMat = new THREE.MeshStandardMaterial({ color: 0xF5F5F5, roughness: 0.6, metalness: 0.0 });
+        const flowerMat1 = new THREE.MeshStandardMaterial({ color: 0xFF6B8A, roughness: 0.7, metalness: 0.0 });
+        const flowerMat2 = new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.7, metalness: 0.0 });
+        const flowerMat3 = new THREE.MeshStandardMaterial({ color: 0xFF8C42, roughness: 0.7, metalness: 0.0 });
+        const bushMat = new THREE.MeshStandardMaterial({ color: 0x3A6B2A, roughness: 0.8, metalness: 0.0 });
 
-        // ──────────────────────────────────
+        // ══════════════════════════════════════════════
         // GROUND
-        // ──────────────────────────────────
-        const groundGeo = new THREE.PlaneGeometry(40, 40, 40, 40);
+        // ══════════════════════════════════════════════
+        const groundGeo = new THREE.PlaneGeometry(60, 60, 50, 50);
         groundGeo.rotateX(-Math.PI / 2);
         const posAttr = groundGeo.attributes.position;
         for (let i = 0; i < posAttr.count; i++) {
             const x = posAttr.getX(i);
             const z = posAttr.getZ(i);
-            const h = Math.sin(x * 0.3) * Math.cos(z * 0.3) * 0.4
-                    + Math.sin(x * 0.7 + 1.5) * Math.cos(z * 0.5) * 0.2;
+            const h = Math.sin(x * 0.25) * Math.cos(z * 0.25) * 0.5
+                    + Math.sin(x * 0.6 + 1.5) * Math.cos(z * 0.4) * 0.3;
             posAttr.setY(i, h);
         }
         groundGeo.computeVertexNormals();
@@ -208,16 +209,10 @@
         ground.name = 'ground';
         scene.add(ground);
 
-        // Ground height sampler for first-person terrain following
         const groundPositions = groundGeo.attributes.position;
         function getGroundHeight(x, z) {
-            // The ground is a 40x40 plane centered at origin, rotated -PI/2
-            // After rotation: the original plane XY maps to world XZ, original Z maps to world Y
-            // Vertices are stored in world space after rotateX
-            // We can just find nearest vertex and interpolate
             let bestDist = Infinity;
             let bestY = 0;
-            // Brute-force nearest-neighbor is fine for 41x41 = 1681 vertices
             for (let i = 0; i < groundPositions.count; i++) {
                 const vx = groundPositions.getX(i);
                 const vz = groundPositions.getZ(i);
@@ -225,10 +220,7 @@
                 const dx = vx - x;
                 const dz = vz - z;
                 const dist = dx * dx + dz * dz;
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    bestY = vy;
-                }
+                if (dist < bestDist) { bestDist = dist; bestY = vy; }
             }
             return bestY;
         }
@@ -236,77 +228,74 @@
         // ──────────────────────────────────
         // DIRT PATH
         // ──────────────────────────────────
-        const pathGeo = new THREE.PlaneGeometry(2, 8);
+        const pathGeo = new THREE.PlaneGeometry(3, 12);
         pathGeo.rotateX(-Math.PI / 2);
         const path = new THREE.Mesh(pathGeo, dirtMat);
-        path.position.set(0, 0.01, 2);
+        path.position.set(0, 0.01, 3);
         path.receiveShadow = true;
         scene.add(path);
 
-        for (let i = 0; i < 3; i++) {
-            const patchGeo = new THREE.CircleGeometry(0.5 + Math.random() * 0.5, 16);
+        for (let i = 0; i < 5; i++) {
+            const patchGeo = new THREE.CircleGeometry(0.6 + Math.random() * 0.8, 16);
             patchGeo.rotateX(-Math.PI / 2);
             const patch = new THREE.Mesh(patchGeo, dirtMat);
-            patch.position.set(-1.5 + i * 1.5, 0.008, 1.2 + Math.random() * 0.5);
+            patch.position.set(-2 + i * 1.2, 0.008, 1.5 + Math.random() * 0.8);
             patch.receiveShadow = true;
             scene.add(patch);
         }
 
-        // ──────────────────────────────────
-        // BARN
-        // ──────────────────────────────────
+        // ══════════════════════════════════════════════
+        // BARN (scaled up 1.6x)
+        // ══════════════════════════════════════════════
         const barnGroup = new THREE.Group();
+        const BARN_S = 1.6;
 
-        const barnBody = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 6), barnBodyMat);
-        barnBody.position.y = 1.5;
+        const barnBody = new THREE.Mesh(new THREE.BoxGeometry(4 * BARN_S, 3 * BARN_S, 6 * BARN_S), barnBodyMat);
+        barnBody.position.y = 1.5 * BARN_S;
         barnBody.castShadow = true;
         barnBody.receiveShadow = true;
         barnGroup.add(barnBody);
 
-        const roof = new THREE.Mesh(new THREE.ConeGeometry(3, 2, 4), barnRoofMat);
-        roof.position.y = 4.0;
+        const roof = new THREE.Mesh(new THREE.ConeGeometry(3 * BARN_S, 2.4 * BARN_S, 4), barnRoofMat);
+        roof.position.y = 3 * BARN_S + 1.2 * BARN_S;
         roof.rotation.y = Math.PI / 4;
         roof.castShadow = true;
         roof.receiveShadow = true;
         barnGroup.add(roof);
 
-        const ridgeBeam = new THREE.Mesh(
-            new THREE.BoxGeometry(0.15, 0.15, 6.2), darkWoodMat
+        // Barn trim/accents
+        const barnTrimTop = new THREE.Mesh(
+            new THREE.BoxGeometry(4.2 * BARN_S, 0.12, 6.2 * BARN_S), whiteMat
         );
-        ridgeBeam.position.y = 4.85;
-        ridgeBeam.castShadow = true;
-        barnGroup.add(ridgeBeam);
+        barnTrimTop.position.y = 3 * BARN_S;
+        barnTrimTop.castShadow = true;
+        barnGroup.add(barnTrimTop);
 
-        const doorGeo1 = new THREE.BoxGeometry(0.45, 2.0, 0.1);
-        const door1 = new THREE.Mesh(doorGeo1, darkWoodMat);
-        door1.position.set(-0.24, 1.0, 3.05);
+        // Door
+        const doorW = 1.2;
+        const doorH = 2.6;
+        const doorGeo = new THREE.BoxGeometry(doorW * 0.5, doorH, 0.1);
+        const door1 = new THREE.Mesh(doorGeo, darkWoodMat);
+        door1.position.set(-doorW * 0.25, doorH / 2, 3 * BARN_S + 0.05);
         door1.castShadow = true;
         barnGroup.add(door1);
-
-        const door2 = new THREE.Mesh(doorGeo1, darkWoodMat);
-        door2.position.set(0.24, 1.0, 3.05);
+        const door2 = new THREE.Mesh(doorGeo, darkWoodMat);
+        door2.position.set(doorW * 0.25, doorH / 2, 3 * BARN_S + 0.05);
         door2.castShadow = true;
         barnGroup.add(door2);
 
-        const frameTop = new THREE.Mesh(
-            new THREE.BoxGeometry(1.0, 0.1, 0.1), woodMat
-        );
-        frameTop.position.set(0, 2.05, 3.05);
-        frameTop.castShadow = true;
-        barnGroup.add(frameTop);
-
-        function createWindow(x, y, z, ry) {
+        function createWindow(x, y, z, ry, scale = 1.0) {
             const winGroup = new THREE.Group();
-            const frame = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.06), woodMat);
+            const frame = new THREE.Mesh(new THREE.BoxGeometry(0.7 * scale, 0.7 * scale, 0.06), woodMat);
             frame.castShadow = true;
             winGroup.add(frame);
-            const pane = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.02), windowMat);
+            const pane = new THREE.Mesh(new THREE.BoxGeometry(0.5 * scale, 0.5 * scale, 0.02), windowMat);
             pane.position.z = 0.02;
             winGroup.add(pane);
-            const hBar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.04), woodMat);
+            const hBar = new THREE.Mesh(new THREE.BoxGeometry(0.5 * scale, 0.04, 0.04), woodMat);
             hBar.position.z = 0.03;
             winGroup.add(hBar);
-            const vBar = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.04), woodMat);
+            const vBar = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5 * scale, 0.04), woodMat);
             vBar.position.z = 0.03;
             winGroup.add(vBar);
             winGroup.position.set(x, y, z);
@@ -314,119 +303,357 @@
             return winGroup;
         }
 
-        barnGroup.add(createWindow(-2.05, 2.2, 0, 0));
-        barnGroup.add(createWindow(2.05, 2.2, 0, 0));
+        barnGroup.add(createWindow(-2 * BARN_S - 0.05, 2.5 * BARN_S, 0, 0, BARN_S));
+        barnGroup.add(createWindow(2 * BARN_S + 0.05, 2.5 * BARN_S, 0, 0, BARN_S));
+        barnGroup.add(createWindow(0, 3.5 * BARN_S, 3 * BARN_S + 0.05, 0, 0.8)); // hay loft
 
-        const loftFrame = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.06), woodMat);
-        loftFrame.position.set(0, 2.9, 3.05);
-        loftFrame.castShadow = true;
-        barnGroup.add(loftFrame);
-        const loftPane = new THREE.Mesh(
-            new THREE.BoxGeometry(0.5, 0.4, 0.02),
-            new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 })
-        );
-        loftPane.position.set(0, 2.9, 3.09);
-        barnGroup.add(loftPane);
-
-        barnGroup.position.set(0, 0, -2);
+        barnGroup.position.set(0, 0, -3);
         scene.add(barnGroup);
-        // Collision box for barn (world space AABB)
         buildings.push({
-            minX: barnGroup.position.x - 2, maxX: barnGroup.position.x + 2,
-            minZ: barnGroup.position.z - 3, maxZ: barnGroup.position.z + 3,
+            minX: barnGroup.position.x - 2 * BARN_S, maxX: barnGroup.position.x + 2 * BARN_S,
+            minZ: barnGroup.position.z - 3 * BARN_S, maxZ: barnGroup.position.z + 3 * BARN_S,
             label: 'barn'
         });
 
-        // ──────────────────────────────────
-        // SILO
-        // ──────────────────────────────────
+        // ══════════════════════════════════════════════
+        // SILO (scaled up 1.5x)
+        // ══════════════════════════════════════════════
         const siloGroup = new THREE.Group();
-        const siloBody = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 5, 32), siloMat);
-        siloBody.position.y = 2.5;
+        const SILO_S = 1.5;
+
+        const siloBody = new THREE.Mesh(new THREE.CylinderGeometry(0.8 * SILO_S, 0.85 * SILO_S, 6 * SILO_S, 32), siloMat);
+        siloBody.position.y = 3 * SILO_S;
         siloBody.castShadow = true;
         siloBody.receiveShadow = true;
         siloGroup.add(siloBody);
 
-        const domeGeo = new THREE.SphereGeometry(0.8, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+        const domeGeo = new THREE.SphereGeometry(0.85 * SILO_S, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
         const dome = new THREE.Mesh(domeGeo, siloMat);
-        dome.position.y = 5.0;
+        dome.position.y = 6 * SILO_S;
         dome.castShadow = true;
         dome.receiveShadow = true;
         siloGroup.add(dome);
 
-        const baseRing = new THREE.Mesh(new THREE.TorusGeometry(0.82, 0.06, 8, 32), darkWoodMat);
-        baseRing.rotation.x = Math.PI / 2;
-        baseRing.position.y = 0.05;
-        baseRing.castShadow = true;
-        siloGroup.add(baseRing);
+        // Silo bands
+        for (let by = 1.5; by < 6; by += 1.5) {
+            const band = new THREE.Mesh(
+                new THREE.TorusGeometry(0.87 * SILO_S, 0.05, 8, 32), darkWoodMat
+            );
+            band.rotation.x = Math.PI / 2;
+            band.position.y = by * SILO_S;
+            band.castShadow = true;
+            siloGroup.add(band);
+        }
 
-        const topRing = new THREE.Mesh(new THREE.TorusGeometry(0.82, 0.06, 8, 32), darkWoodMat);
-        topRing.rotation.x = Math.PI / 2;
-        topRing.position.y = 4.98;
-        topRing.castShadow = true;
-        siloGroup.add(topRing);
-
-        siloGroup.position.set(2.8, 0, -2);
+        siloGroup.position.set(4.5, 0, -3);
         scene.add(siloGroup);
         buildings.push({
-            minX: siloGroup.position.x - 0.8, maxX: siloGroup.position.x + 0.8,
-            minZ: siloGroup.position.z - 0.8, maxZ: siloGroup.position.z + 0.8,
+            minX: siloGroup.position.x - 0.85 * SILO_S, maxX: siloGroup.position.x + 0.85 * SILO_S,
+            minZ: siloGroup.position.z - 0.85 * SILO_S, maxZ: siloGroup.position.z + 0.85 * SILO_S,
             label: 'silo'
         });
 
-        // ──────────────────────────────────
-        // FARMHOUSE
-        // ──────────────────────────────────
+        // ══════════════════════════════════════════════
+        // FARMHOUSE (scaled up 1.5x)
+        // ══════════════════════════════════════════════
         const houseGroup = new THREE.Group();
-        const houseBody = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2, 3), houseWallMat);
-        houseBody.position.y = 1.0;
+        const HOUSE_S = 1.5;
+
+        const houseBody = new THREE.Mesh(new THREE.BoxGeometry(2.5 * HOUSE_S, 2.2 * HOUSE_S, 3.5 * HOUSE_S), houseWallMat);
+        houseBody.position.y = 1.1 * HOUSE_S;
         houseBody.castShadow = true;
         houseBody.receiveShadow = true;
         houseGroup.add(houseBody);
 
-        const houseRoof = new THREE.Mesh(new THREE.ConeGeometry(1.8, 1.2, 4), houseRoofMat);
-        houseRoof.position.y = 2.6;
+        const houseRoof = new THREE.Mesh(new THREE.ConeGeometry(2 * HOUSE_S, 1.6 * HOUSE_S, 4), houseRoofMat);
+        houseRoof.position.y = 2.2 * HOUSE_S + 0.8 * HOUSE_S;
         houseRoof.rotation.y = Math.PI / 4;
         houseRoof.castShadow = true;
         houseRoof.receiveShadow = true;
         houseGroup.add(houseRoof);
 
         const chimney = new THREE.Mesh(
-            new THREE.BoxGeometry(0.25, 1.5, 0.25),
+            new THREE.BoxGeometry(0.3 * HOUSE_S, 2 * HOUSE_S, 0.3 * HOUSE_S),
             new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.6, metalness: 0.0 })
         );
-        chimney.position.set(0.5, 2.8, -0.5);
+        chimney.position.set(0.7 * HOUSE_S, 3 * HOUSE_S, -0.6 * HOUSE_S);
         chimney.castShadow = true;
         houseGroup.add(chimney);
 
-        const houseDoor = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.2, 0.08), darkWoodMat);
-        houseDoor.position.set(0, 0.6, 1.54);
+        const houseDoor = new THREE.Mesh(new THREE.BoxGeometry(0.7 * HOUSE_S, 1.5 * HOUSE_S, 0.08), darkWoodMat);
+        houseDoor.position.set(0, 0.75 * HOUSE_S, 1.75 * HOUSE_S + 0.04);
         houseDoor.castShadow = true;
         houseGroup.add(houseDoor);
 
-        const hw1 = createWindow(-0.6, 1.3, 1.54, 0);
-        hw1.scale.set(0.7, 0.7, 0.7);
-        houseGroup.add(hw1);
-        const hw2 = createWindow(0.6, 1.3, 1.54, 0);
-        hw2.scale.set(0.7, 0.7, 0.7);
-        houseGroup.add(hw2);
+        houseGroup.add(createWindow(-0.75 * HOUSE_S, 1.5 * HOUSE_S, 1.75 * HOUSE_S + 0.04, 0, 0.7 * HOUSE_S));
+        houseGroup.add(createWindow(0.75 * HOUSE_S, 1.5 * HOUSE_S, 1.75 * HOUSE_S + 0.04, 0, 0.7 * HOUSE_S));
 
-        houseGroup.position.set(-5, 0, -2);
+        houseGroup.position.set(-7, 0, -3);
         scene.add(houseGroup);
         buildings.push({
-            minX: houseGroup.position.x - 1.25, maxX: houseGroup.position.x + 1.25,
-            minZ: houseGroup.position.z - 1.5, maxZ: houseGroup.position.z + 1.5,
+            minX: houseGroup.position.x - 1.25 * HOUSE_S, maxX: houseGroup.position.x + 1.25 * HOUSE_S,
+            minZ: houseGroup.position.z - 1.75 * HOUSE_S, maxZ: houseGroup.position.z + 1.75 * HOUSE_S,
             label: 'house'
         });
 
-        // ──────────────────────────────────
-        // TREES
-        // ──────────────────────────────────
+        // ══════════════════════════════════════════════
+        // WELL (near house)
+        // ══════════════════════════════════════════════
+        const wellGroup = new THREE.Group();
+        const wellBase = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.65, 0.8, 16), stoneMat);
+        wellBase.position.y = 0.4;
+        wellBase.castShadow = true;
+        wellBase.receiveShadow = true;
+        wellGroup.add(wellBase);
+
+        // Well roof posts
+        for (let i = 0; i < 2; i++) {
+            const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.4, 8), darkWoodMat);
+            post.position.set(i === 0 ? -0.45 : 0.45, 1.1, 0);
+            post.castShadow = true;
+            wellGroup.add(post);
+        }
+        // Well roof
+        const wellRoof = new THREE.Mesh(new THREE.ConeGeometry(0.7, 0.5, 6), darkWoodMat);
+        wellRoof.position.y = 1.8;
+        wellRoof.castShadow = true;
+        wellGroup.add(wellRoof);
+
+        // Crank
+        const crankAxle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.6, 8), ironMat);
+        crankAxle.position.set(0.3, 1.2, 0.3);
+        crankAxle.rotation.z = Math.PI / 2;
+        crankAxle.castShadow = true;
+        wellGroup.add(crankAxle);
+
+        wellGroup.position.set(-5, getGroundHeight(-5, -5) + 0.01, -5);
+        scene.add(wellGroup);
+        buildings.push({
+            minX: wellGroup.position.x - 0.7, maxX: wellGroup.position.x + 0.7,
+            minZ: wellGroup.position.z - 0.7, maxZ: wellGroup.position.z + 0.7,
+            label: 'well'
+        });
+
+        // ══════════════════════════════════════════════
+        // HAY BALES (near barn)
+        // ══════════════════════════════════════════════
+        function createHayBale(x, z, s = 1.0) {
+            const group = new THREE.Group();
+            const bale = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.4 * s, 0.4 * s, 0.7 * s, 16),
+                hayMat
+            );
+            bale.position.y = 0.35 * s;
+            bale.castShadow = true;
+            bale.receiveShadow = true;
+            group.add(bale);
+            // Twine lines
+            for (let i = 0; i < 2; i++) {
+                const twine = new THREE.Mesh(
+                    new THREE.TorusGeometry(0.41 * s, 0.02, 8, 16),
+                    new THREE.MeshStandardMaterial({ color: 0x8B7355, roughness: 0.9 })
+                );
+                twine.rotation.x = Math.PI / 2;
+                twine.position.y = 0.2 + i * 0.3 * s;
+                group.add(twine);
+            }
+            group.position.set(x, getGroundHeight(x, z), z);
+            group.rotation.y = Math.random() * Math.PI;
+            return group;
+        }
+
+        const hayBales = [
+            [3.5, -5.2, 1.0], [4.3, -5.5, 0.85], [4.0, -5.0, 0.9],
+            [3.5, -4.5, 0.75], [4.5, -4.8, 0.8],
+        ];
+        hayBales.forEach(([x, z, s]) => scene.add(createHayBale(x, z, s)));
+
+        // ══════════════════════════════════════════════
+        // SCARECROW (in crop field)
+        // ══════════════════════════════════════════════
+        const scarecrowGroup = new THREE.Group();
+        const scBody = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.2, 0.15), woodMat);
+        scBody.position.y = 0.6;
+        scBody.castShadow = true;
+        scarecrowGroup.add(scBody);
+        // Cross arm
+        const scArm = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.08, 0.08), woodMat);
+        scArm.position.y = 1.0;
+        scArm.castShadow = true;
+        scarecrowGroup.add(scArm);
+        // Head
+        const scHead = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), whiteMat);
+        scHead.position.y = 1.3;
+        scHead.castShadow = true;
+        scarecrowGroup.add(scHead);
+        // Hat
+        const scHatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.04, 12), darkWoodMat);
+        scHatBrim.position.y = 1.4;
+        scHatBrim.castShadow = true;
+        scarecrowGroup.add(scHatBrim);
+        const scHatTop = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.25, 12), darkWoodMat);
+        scHatTop.position.y = 1.52;
+        scHatTop.castShadow = true;
+        scarecrowGroup.add(scHatTop);
+        // Post
+        const scPost = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.8, 8), woodMat);
+        scPost.position.y = -0.4;
+        scPost.castShadow = true;
+        scarecrowGroup.add(scPost);
+
+        scarecrowGroup.position.set(4.5, 0.6, 6.5);
+        scene.add(scarecrowGroup);
+        buildings.push({
+            minX: scarecrowGroup.position.x - 0.15, maxX: scarecrowGroup.position.x + 0.15,
+            minZ: scarecrowGroup.position.z - 0.15, maxZ: scarecrowGroup.position.z + 0.15,
+            label: 'scarecrow'
+        });
+
+        // ══════════════════════════════════════════════
+        // CART / WAGON (near barn)
+        // ══════════════════════════════════════════════
+        const cartGroup = new THREE.Group();
+        const cartBed = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.2, 1.0), woodMat);
+        cartBed.position.y = 0.5;
+        cartBed.castShadow = true;
+        cartBed.receiveShadow = true;
+        cartGroup.add(cartBed);
+        // Sides
+        for (let sx = -1; sx <= 1; sx += 2) {
+            const side = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.4, 0.9), woodMat);
+            side.position.set(sx * 0.87, 0.7, 0);
+            side.castShadow = true;
+            cartGroup.add(side);
+        }
+        // Wheels
+        for (let wx = -1; wx <= 1; wx += 2) {
+            for (let wz = -1; wz <= 1; wz += 2) {
+                const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.08, 16), ironMat);
+                wheel.rotation.x = Math.PI / 2;
+                wheel.position.set(wx * 0.6, 0.22, wz * 0.5);
+                wheel.castShadow = true;
+                cartGroup.add(wheel);
+            }
+        }
+        // Shaft
+        const shaft = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 0.06), darkWoodMat);
+        shaft.position.set(0, 0.6, 0.6);
+        shaft.castShadow = true;
+        cartGroup.add(shaft);
+
+        cartGroup.position.set(2, getGroundHeight(2, -4.5) + 0.01, -4.5);
+        cartGroup.rotation.y = -0.3;
+        scene.add(cartGroup);
+        buildings.push({
+            minX: cartGroup.position.x - 1.1, maxX: cartGroup.position.x + 1.1,
+            minZ: cartGroup.position.z - 0.7, maxZ: cartGroup.position.z + 0.7,
+            label: 'cart'
+        });
+
+        // ══════════════════════════════════════════════
+        // DOG HOUSE + DOG
+        // ══════════════════════════════════════════════
+        const dogHouseGroup = new THREE.Group();
+        const dhBody = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.7), woodMat);
+        dhBody.position.y = 0.3;
+        dhBody.castShadow = true;
+        dhBody.receiveShadow = true;
+        dogHouseGroup.add(dhBody);
+        const dhRoof = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.4, 4), darkWoodMat);
+        dhRoof.position.y = 0.8;
+        dhRoof.rotation.y = Math.PI / 4;
+        dhRoof.castShadow = true;
+        dogHouseGroup.add(dhRoof);
+        // Opening
+        const dhOpen = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.05),
+            new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 })
+        );
+        dhOpen.position.set(0, 0.2, 0.37);
+        dogHouseGroup.add(dhOpen);
+
+        dogHouseGroup.position.set(-6.5, getGroundHeight(-6.5, -3), -3);
+        scene.add(dogHouseGroup);
+
+        // Dog (simple)
+        const dogGroup = new THREE.Group();
+        const dogBody = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.18, 0.4), new THREE.MeshStandardMaterial({ color: 0xD2A56C, roughness: 0.7 }));
+        dogBody.position.y = 0.18;
+        dogBody.castShadow = true;
+        dogGroup.add(dogBody);
+        const dogHead = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.16), new THREE.MeshStandardMaterial({ color: 0xD2A56C, roughness: 0.7 }));
+        dogHead.position.set(0, 0.3, 0.22);
+        dogHead.castShadow = true;
+        dogGroup.add(dogHead);
+        // Ears
+        for (let ex = -1; ex <= 1; ex += 2) {
+            const ear = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.1, 4), new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.7 }));
+            ear.position.set(ex * 0.07, 0.38, 0.2);
+            ear.rotation.z = ex * 0.4;
+            ear.castShadow = true;
+            dogGroup.add(ear);
+        }
+        // Tail
+        const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.04, 0.15, 6), new THREE.MeshStandardMaterial({ color: 0xD2A56C, roughness: 0.7 }));
+        tail.position.set(0, 0.28, -0.22);
+        tail.rotation.x = -0.8;
+        tail.castShadow = true;
+        dogGroup.add(tail);
+        // Legs
+        for (let lx = -1; lx <= 1; lx += 2) {
+            for (let lz = -1; lz <= 1; lz += 2) {
+                const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.15, 6), new THREE.MeshStandardMaterial({ color: 0xB8864E, roughness: 0.7 }));
+                leg.position.set(lx * 0.1, 0.07, lz * 0.13);
+                leg.castShadow = true;
+                dogGroup.add(leg);
+            }
+        }
+
+        dogGroup.position.set(-7, getGroundHeight(-7, -3.2), -3.2);
+        dogGroup.userData.baseX = dogGroup.position.x;
+        dogGroup.userData.baseZ = dogGroup.position.z;
+        dogGroup.userData.animTime = Math.random() * 10;
+        scene.add(dogGroup);
+
+        // ══════════════════════════════════════════════
+        // FLOWER BEDS / BUSHES
+        // ══════════════════════════════════════════════
+        function createBushCluster(x, z, count = 3) {
+            const group = new THREE.Group();
+            for (let i = 0; i < count; i++) {
+                const bush = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.2 + Math.random() * 0.25, 8, 5),
+                    [bushMat, flowerMat1, flowerMat2, flowerMat3][Math.floor(Math.random() * 4)]
+                );
+                bush.position.set(
+                    (Math.random() - 0.5) * 0.6,
+                    0.15 + Math.random() * 0.15,
+                    (Math.random() - 0.5) * 0.6
+                );
+                bush.scale.y = 0.6 + Math.random() * 0.3;
+                bush.castShadow = true;
+                bush.receiveShadow = true;
+                group.add(bush);
+            }
+            group.position.set(x, getGroundHeight(x, z), z);
+            return group;
+        }
+
+        // Bushes around the farm
+        const bushSpots = [
+            [-7, 1.5], [-7.5, 2.5], [7, 1], [7.5, 2],
+            [0, -6.5], [2, -6.8], [-2, -6.5],
+            [-4, -6.3], [6, -5.5], [-0.5, 6.8],
+        ];
+        bushSpots.forEach(([x, z]) => scene.add(createBushCluster(x, z, 2 + Math.floor(Math.random() * 3))));
+
+        // ══════════════════════════════════════════════
+        // TREES (more trees, placed wider)
+        // ══════════════════════════════════════════════
         function createTree(x, z, scale = 1.0) {
             const treeGroup = new THREE.Group();
-            const trunkH = 2.5 * scale;
+            const trunkH = 3 * scale;
             const trunk = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.12 * scale, 0.2 * scale, trunkH, 8), woodMat
+                new THREE.CylinderGeometry(0.15 * scale, 0.22 * scale, trunkH, 8), woodMat
             );
             trunk.position.y = trunkH / 2;
             trunk.castShadow = true;
@@ -434,9 +661,9 @@
             treeGroup.add(trunk);
 
             const tiers = [
-                { r: 1.1 * scale, h: 1.8 * scale, y: trunkH + 0.6 * scale, mat: leafMat1 },
-                { r: 0.85 * scale, h: 1.6 * scale, y: trunkH + 1.2 * scale, mat: leafMat2 },
-                { r: 0.55 * scale, h: 1.3 * scale, y: trunkH + 1.7 * scale, mat: leafMat3 },
+                { r: 1.2 * scale, h: 2.2 * scale, y: trunkH + 0.5 * scale, mat: leafMat1 },
+                { r: 0.95 * scale, h: 1.9 * scale, y: trunkH + 1.3 * scale, mat: leafMat2 },
+                { r: 0.6 * scale, h: 1.5 * scale, y: trunkH + 2.0 * scale, mat: leafMat3 },
             ];
             tiers.forEach(t => {
                 const cone = new THREE.Mesh(new THREE.ConeGeometry(t.r, t.h, 8), t.mat);
@@ -451,33 +678,36 @@
         }
 
         const treePositions = [
-            [-8.5, -5.5, 1.0], [-9.5, -2, 0.85], [-8.8, 2, 1.1], [-9.2, 5, 0.9],
-            [8.5, -5, 1.0], [9.5, -1.5, 0.8], [8.8, 3, 1.05], [9, 6, 0.95],
-            [-4, -7, 1.1], [0, -7.5, 1.2], [4, -7, 1.0],
-            [-7, 4, 0.85],
-            [-3, 5.5, 0.7], [3, 5.5, 0.75], [7.5, -3, 0.9],
+            // Perimeter trees (wider spread)
+            [-12, -8, 1.1], [-13, -3, 1.0], [-12.5, 2, 1.15], [-13, 7, 0.95],
+            [12, -7, 1.05], [13, -2, 0.9], [12.5, 3, 1.1], [12.5, 7, 1.0],
+            [-5, -9, 1.2], [0, -9.5, 1.25], [5, -9, 1.15],
+            [-9, 7.5, 0.9], [9, 8, 0.95],
+            // Near house
+            [-9, -1, 0.85], [-9.5, 1, 0.8],
+            // Scattered inside farm
+            [-2, 7, 0.7], [2, 7, 0.75], [8, -4, 0.85],
         ];
 
         treePositions.forEach(([x, z, s]) => {
             const tree = createTree(x, z, s);
             scene.add(tree);
-            // Tree collision (small radius trunk)
             buildings.push({
-                minX: x - 0.2 * s, maxX: x + 0.2 * s,
-                minZ: z - 0.2 * s, maxZ: z + 0.2 * s,
+                minX: x - 0.22 * s, maxX: x + 0.22 * s,
+                minZ: z - 0.22 * s, maxZ: z + 0.22 * s,
                 label: 'tree'
             });
         });
 
-        // ──────────────────────────────────
-        // FENCE SYSTEM
-        // ──────────────────────────────────
+        // ══════════════════════════════════════════════
+        // FENCE SYSTEM (wider to match bigger ground)
+        // ══════════════════════════════════════════════
         const fenceGroup = new THREE.Group();
-        const postGeo = new THREE.CylinderGeometry(0.07, 0.09, 1.2, 8);
+        const postGeo = new THREE.CylinderGeometry(0.08, 0.1, 1.4, 8);
 
         function addFencePost(px, pz) {
             const post = new THREE.Mesh(postGeo, woodMat);
-            post.position.set(px, 0.6, pz);
+            post.position.set(px, 0.7, pz);
             post.castShadow = true;
             post.receiveShadow = true;
             fenceGroup.add(post);
@@ -487,7 +717,7 @@
             const dx = x2 - x1;
             const dz = z2 - z1;
             const length = Math.sqrt(dx * dx + dz * dz);
-            const rail = new THREE.Mesh(new THREE.BoxGeometry(length, 0.05, 0.04), woodMat);
+            const rail = new THREE.Mesh(new THREE.BoxGeometry(length, 0.06, 0.05), woodMat);
             rail.position.set((x1 + x2) / 2, y, (z1 + z2) / 2);
             rail.rotation.y = Math.atan2(dx, dz);
             rail.castShadow = true;
@@ -499,20 +729,20 @@
                 const [x1, z1] = points[i];
                 const [x2, z2] = points[i + 1];
                 addFencePost(x1, z1);
-                addFenceRail(x1, z1, x2, z2, 0.5);
-                addFenceRail(x1, z1, x2, z2, 0.9);
+                addFenceRail(x1, z1, x2, z2, 0.55);
+                addFenceRail(x1, z1, x2, z2, 1.05);
             }
             const [lx, lz] = points[points.length - 1];
             addFencePost(lx, lz);
             if (points.length >= 2) {
                 const [px, pz] = points[points.length - 2];
-                addFenceRail(px, pz, lx, lz, 0.5);
-                addFenceRail(px, pz, lx, lz, 0.9);
+                addFenceRail(px, pz, lx, lz, 0.55);
+                addFenceRail(px, pz, lx, lz, 1.05);
             }
         }
 
-        const halfW = 8.5;
-        const halfD = 6.5;
+        const halfW = 11;
+        const halfD = 8.5;
         const spacing = 1.5;
 
         const backPoints = [];
@@ -520,53 +750,63 @@
         buildFenceSide(backPoints);
 
         const frontLeft = [];
-        for (let x = -halfW; x <= -1.2; x += spacing) frontLeft.push([x, halfD]);
+        for (let x = -halfW; x <= -1.5; x += spacing) frontLeft.push([x, halfD]);
         buildFenceSide(frontLeft);
         const frontRight = [];
-        for (let x = 1.2; x <= halfW; x += spacing) frontRight.push([x, halfD]);
+        for (let x = 1.5; x <= halfW; x += spacing) frontRight.push([x, halfD]);
         buildFenceSide(frontRight);
 
         const leftPoints = [];
         for (let z = -halfD + spacing; z < halfD; z += spacing) leftPoints.push([-halfW, z]);
         buildFenceSide(leftPoints);
-
         const rightPoints = [];
         for (let z = -halfD + spacing; z < halfD; z += spacing) rightPoints.push([halfW, z]);
         buildFenceSide(rightPoints);
 
-        const gatePostGeo = new THREE.CylinderGeometry(0.1, 0.12, 1.3, 8);
-        [-1.2, 1.2].forEach(gx => {
+        // Gate posts with lanterns
+        const gatePostGeo = new THREE.CylinderGeometry(0.12, 0.14, 1.5, 8);
+        [-1.5, 1.5].forEach(gx => {
             const gp = new THREE.Mesh(gatePostGeo, darkWoodMat);
-            gp.position.set(gx, 0.65, halfD);
+            gp.position.set(gx, 0.75, halfD);
             gp.castShadow = true;
             gp.receiveShadow = true;
             fenceGroup.add(gp);
-            const gpTop = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 4), darkWoodMat);
-            gpTop.position.set(gx, 1.32, halfD);
-            gpTop.castShadow = true;
-            fenceGroup.add(gpTop);
+            // Lantern
+            const lanternBody = new THREE.Mesh(
+                new THREE.BoxGeometry(0.15, 0.25, 0.15),
+                new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.3, metalness: 0.5, emissive: 0x331100, emissiveIntensity: 0.4 })
+            );
+            lanternBody.position.set(gx, 1.5, halfD);
+            lanternBody.castShadow = true;
+            fenceGroup.add(lanternBody);
         });
 
-        scene.add(fenceGroup);
-        // Fence collision: add fence posts as small collision cylinders
-        // We'll treat the entire perimeter as a boundary for simplicity
-        // Inner fence boundary (gate is open, so no collision at gate)
-        const FENCE_INNER_MARGIN = 0.3;
+        // Gate sign
+        const signPost = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.0, 8), darkWoodMat);
+        signPost.position.set(0, 1.0, halfD + 0.3);
+        signPost.castShadow = true;
+        fenceGroup.add(signPost);
+        const signBoard = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 0.05), woodMat);
+        signBoard.position.set(0, 1.7, halfD + 0.3);
+        signBoard.castShadow = true;
+        fenceGroup.add(signBoard);
 
-        // ──────────────────────────────────
-        // CROP BEDS
-        // ──────────────────────────────────
+        scene.add(fenceGroup);
+
+        // ══════════════════════════════════════════════
+        // CROP BEDS (more beds, larger)
+        // ══════════════════════════════════════════════
         const cropGroups = [];
 
         function createCornStalk() {
             const group = new THREE.Group();
-            const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 1.0, 6), cornMat);
-            stalk.position.y = 0.5;
+            const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.2, 6), cornMat);
+            stalk.position.y = 0.6;
             stalk.castShadow = true;
             group.add(stalk);
             for (let i = 0; i < 3; i++) {
-                const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.25, 0.015), cornMat);
-                leaf.position.y = 0.3 + i * 0.25;
+                const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.35, 0.02), cornMat);
+                leaf.position.y = 0.4 + i * 0.3;
                 leaf.rotation.z = (0.5 + i * 0.3) * (i % 2 === 0 ? 1 : -1);
                 leaf.rotation.x = 0.2;
                 leaf.castShadow = true;
@@ -578,14 +818,14 @@
         function createWheat() {
             const group = new THREE.Group();
             const stem = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.02, 0.03, 0.5, 4),
+                new THREE.CylinderGeometry(0.025, 0.035, 0.6, 4),
                 new THREE.MeshStandardMaterial({ color: 0x6B8E23, roughness: 0.8 })
             );
-            stem.position.y = 0.25;
+            stem.position.y = 0.3;
             stem.castShadow = true;
             group.add(stem);
-            const head = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.2, 4), wheatMat);
-            head.position.y = 0.6;
+            const head = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.25, 4), wheatMat);
+            head.position.y = 0.72;
             head.castShadow = true;
             group.add(head);
             return group;
@@ -593,19 +833,34 @@
 
         function createPumpkin() {
             const group = new THREE.Group();
-            const body = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), pumpkinMat);
+            const body = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), pumpkinMat);
             body.scale.set(1, 0.6, 1);
-            body.position.y = 0.07;
+            body.position.y = 0.09;
             body.castShadow = true;
             body.receiveShadow = true;
             group.add(body);
             const stem = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.02, 0.03, 0.1, 5),
+                new THREE.CylinderGeometry(0.025, 0.035, 0.12, 5),
                 new THREE.MeshStandardMaterial({ color: 0x228B22, roughness: 0.8 })
             );
-            stem.position.y = 0.16;
+            stem.position.y = 0.2;
             stem.castShadow = true;
             group.add(stem);
+            return group;
+        }
+
+        function createTomato() {
+            const group = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6),
+                new THREE.MeshStandardMaterial({ color: 0xE83030, roughness: 0.4, metalness: 0.05 }));
+            body.position.y = 0.1;
+            body.castShadow = true;
+            group.add(body);
+            const calyx = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.08, 5),
+                new THREE.MeshStandardMaterial({ color: 0x228B22, roughness: 0.8 }));
+            calyx.position.y = 0.17;
+            calyx.rotation.x = Math.PI;
+            group.add(calyx);
             return group;
         }
 
@@ -613,8 +868,8 @@
             const bedGroup = new THREE.Group();
             bedGroup.userData.cropType = type;
 
-            const spacingX = type === 'pumpkin' ? 0.5 : 0.25;
-            const spacingZ = type === 'pumpkin' ? 0.5 : 0.25;
+            const spacingX = type === 'pumpkin' ? 0.55 : type === 'tomato' ? 0.4 : 0.3;
+            const spacingZ = type === 'pumpkin' ? 0.55 : type === 'tomato' ? 0.4 : 0.3;
             const offsetX = (cols - 1) * spacingX / 2;
             const offsetZ = (rows - 1) * spacingZ / 2;
 
@@ -623,16 +878,17 @@
                     let plant;
                     if (type === 'corn') plant = createCornStalk();
                     else if (type === 'wheat') plant = createWheat();
-                    else plant = createPumpkin();
+                    else if (type === 'pumpkin') plant = createPumpkin();
+                    else plant = createTomato();
 
-                    plant.position.x = c * spacingX - offsetX + (Math.random() - 0.5) * 0.08;
-                    plant.position.z = r * spacingZ - offsetZ + (Math.random() - 0.5) * 0.08;
+                    plant.position.x = c * spacingX - offsetX + (Math.random() - 0.5) * 0.1;
+                    plant.position.z = r * spacingZ - offsetZ + (Math.random() - 0.5) * 0.1;
                     plant.rotation.z = (Math.random() - 0.5) * 0.3;
                     bedGroup.add(plant);
                 }
             }
 
-            const soilGeo = new THREE.BoxGeometry(cols * spacingX + 0.2, 0.05, rows * spacingZ + 0.2);
+            const soilGeo = new THREE.BoxGeometry(cols * spacingX + 0.3, 0.06, rows * spacingZ + 0.3);
             const soil = new THREE.Mesh(
                 soilGeo,
                 new THREE.MeshStandardMaterial({ color: 0x5C4033, roughness: 0.95, metalness: 0.0 })
@@ -647,61 +903,59 @@
         }
 
         const cropBeds = [
-            { x: 3, z: 3.5, type: 'corn', rows: 3, cols: 6 },
-            { x: 5.5, z: 3.5, type: 'wheat', rows: 4, cols: 8 },
-            { x: 3, z: 5.5, type: 'pumpkin', rows: 2, cols: 4 },
-            { x: 5.5, z: 5.5, type: 'corn', rows: 3, cols: 6 },
-            { x: 4.25, z: 7.5, type: 'wheat', rows: 4, cols: 8 },
-            { x: -3, z: 4, type: 'wheat', rows: 4, cols: 8 },
-            { x: -5.5, z: 4, type: 'corn', rows: 3, cols: 6 },
-            { x: -4.25, z: 6, type: 'pumpkin', rows: 2, cols: 4 },
+            // Right field
+            { x: 4, z: 5, type: 'corn', rows: 3, cols: 7 },
+            { x: 7, z: 5, type: 'wheat', rows: 4, cols: 9 },
+            { x: 4, z: 7.5, type: 'pumpkin', rows: 2, cols: 5 },
+            { x: 7, z: 7.5, type: 'tomato', rows: 3, cols: 5 },
+            { x: 5.5, z: 10, type: 'wheat', rows: 4, cols: 9 },
+            // Left field
+            { x: -4, z: 5, type: 'wheat', rows: 4, cols: 9 },
+            { x: -7, z: 5, type: 'corn', rows: 3, cols: 7 },
+            { x: -5.5, z: 7.5, type: 'tomato', rows: 3, cols: 5 },
+            { x: -4, z: 10, type: 'pumpkin', rows: 2, cols: 5 },
+            { x: -7.5, z: 7.5, type: 'wheat', rows: 4, cols: 8 },
         ];
 
         cropBeds.forEach(bed => {
             scene.add(createCropBed(bed.x, bed.z, bed.type, bed.rows, bed.cols));
         });
 
-        // ──────────────────────────────────
+        // ══════════════════════════════════════════════
         // WATER TROUGH
-        // ──────────────────────────────────
+        // ══════════════════════════════════════════════
         const troughGroup = new THREE.Group();
-        const troughBody = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.3, 0.6), woodMat);
-        troughBody.position.y = 0.3;
+        const troughBody = new THREE.Mesh(new THREE.BoxGeometry(2, 0.4, 0.8), woodMat);
+        troughBody.position.y = 0.45;
         troughBody.castShadow = true;
         troughBody.receiveShadow = true;
         troughGroup.add(troughBody);
-
-        const waterGeo = new THREE.BoxGeometry(1.3, 0.02, 0.45);
+        const waterGeo = new THREE.BoxGeometry(1.7, 0.03, 0.55);
         const water = new THREE.Mesh(
             waterGeo,
-            new THREE.MeshStandardMaterial({ color: 0x4488CC, roughness: 0.2, metalness: 0.3, transparent: true, opacity: 0.7 })
+            new THREE.MeshStandardMaterial({ color: 0x4488CC, roughness: 0.15, metalness: 0.3, transparent: true, opacity: 0.7 })
         );
-        water.position.y = 0.44;
+        water.position.y = 0.62;
         troughGroup.add(water);
-
-        troughGroup.position.set(3.5, 0, -4.5);
+        troughGroup.position.set(5, 0, -5.5);
         scene.add(troughGroup);
         buildings.push({
-            minX: troughGroup.position.x - 0.75, maxX: troughGroup.position.x + 0.75,
-            minZ: troughGroup.position.z - 0.3, maxZ: troughGroup.position.z + 0.3,
+            minX: troughGroup.position.x - 1, maxX: troughGroup.position.x + 1,
+            minZ: troughGroup.position.z - 0.4, maxZ: troughGroup.position.z + 0.4,
             label: 'trough'
         });
 
-        // ──────────────────────────────────
+        // ══════════════════════════════════════════════
         // CLOUDS
-        // ──────────────────────────────────
+        // ══════════════════════════════════════════════
         const cloudGroups = [];
 
         function createCloud(cx, cy, cz, size) {
             const cloudGroup = new THREE.Group();
             const sphereGeo = new THREE.SphereGeometry(1, 8, 6);
             const offsets = [
-                [0, 0, 0, 1.0],
-                [0.7, 0.15, 0.2, 0.8],
-                [-0.7, 0.1, 0.1, 0.85],
-                [0.35, 0.25, -0.5, 0.7],
-                [-0.35, 0.2, -0.45, 0.75],
-                [0.0, -0.15, 0.6, 0.65],
+                [0, 0, 0, 1.0], [0.7, 0.15, 0.2, 0.8], [-0.7, 0.1, 0.1, 0.85],
+                [0.35, 0.25, -0.5, 0.7], [-0.35, 0.2, -0.45, 0.75], [0.0, -0.15, 0.6, 0.65],
             ];
             offsets.forEach(([ox, oy, oz, s]) => {
                 const blob = new THREE.Mesh(sphereGeo, cloudMat);
@@ -716,46 +970,39 @@
             return cloudGroup;
         }
 
-        const clouds = [
-            [-8, 14, -6, 0.8],
-            [5, 16, -8, 0.9],
-            [-5, 15, 8, 0.7],
-            [8, 13, 5, 0.75],
-            [-9, 14, 3, 0.65],
-            [2, 17, 7, 0.85],
-            [-3, 15, -3, 0.7],
-        ];
-        clouds.forEach(([x, y, z, s]) => {
-            scene.add(createCloud(x, y, z, s));
-        });
+        [
+            [-10, 16, -8, 1.0], [6, 18, -10, 1.1], [-7, 17, 10, 0.85],
+            [10, 15, 6, 0.9], [-12, 16, 4, 0.8], [3, 19, 8, 1.0],
+            [-5, 17, -5, 0.85], [8, 15, -4, 0.95],
+        ].forEach(([x, y, z, s]) => scene.add(createCloud(x, y, z, s)));
 
-        // ──────────────────────────────────
+        // ══════════════════════════════════════════════
         // BIRDS
-        // ──────────────────────────────────
+        // ══════════════════════════════════════════════
         const birdGroup = new THREE.Group();
         const birdGeo = new THREE.ConeGeometry(0.08, 0.05, 4);
-        const birdMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5 });
+        const birdMatB = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5 });
 
-        for (let i = 0; i < 6; i++) {
-            const bird = new THREE.Mesh(birdGeo, birdMat);
+        for (let i = 0; i < 8; i++) {
+            const bird = new THREE.Mesh(birdGeo, birdMatB);
             bird.rotation.z = Math.PI / 2;
-            bird.position.set(
-                -10 + Math.random() * 20,
-                10 + Math.random() * 8,
-                -8 + Math.random() * 16
-            );
+            bird.position.set(-15 + Math.random() * 30, 12 + Math.random() * 10, -10 + Math.random() * 20);
             bird.castShadow = true;
-            bird.userData.speed = 0.5 + Math.random() * 1.5;
-            bird.userData.radius = 3 + Math.random() * 8;
+            bird.userData.speed = 0.4 + Math.random() * 1.5;
             bird.userData.phase = Math.random() * Math.PI * 2;
             bird.userData.baseY = bird.position.y;
+            bird.userData.baseX = bird.position.x;
+            bird.userData.baseZ = bird.position.z;
+            bird.userData.radius = 5 + Math.random() * 12;
             birdGroup.add(bird);
         }
         scene.add(birdGroup);
 
         // ══════════════════════════════════════════════
-        // FIRST-PERSON MODE EVENT HANDLERS
+        // FIRST-PERSON EVENT HANDLERS
         // ══════════════════════════════════════════════
+        const FENCE_MARGIN = 0.4;
+
         function checkCollision(x, z, radius = 0.35) {
             for (const b of buildings) {
                 const closestX = Math.max(b.minX, Math.min(x, b.maxX));
@@ -766,27 +1013,17 @@
                     return { hit: true, pushX: closestX, pushZ: closestZ, radius, label: b.label };
                 }
             }
-            // Fence boundary (hard outer perimeter)
-            const outerHalfW = halfW + FENCE_INNER_MARGIN;
-            const outerHalfD = halfD + FENCE_INNER_MARGIN;
-            // Gate opening: gap between -1.2 and 1.2 at z = halfD
-            // Allow passing through gate
-            if (z > halfD - 0.3 && (x < -1.5 || x > 1.5)) {
-                // Hit fence on front side (except gate)
-                const pushZ = halfD - 0.3;
-                if (Math.abs(z - pushZ) < radius + 1.0) {
-                    return { hit: true, pushX: x, pushZ, radius, label: 'fence' };
+            // Fence boundary
+            const outerHalfW = halfW - FENCE_MARGIN;
+            const outerHalfD = halfD - FENCE_MARGIN;
+            if (z > halfD - 0.3 && (x < -1.8 || x > 1.8)) {
+                if (Math.abs(z - (halfD - 0.3)) < radius + 1.0) {
+                    return { hit: true, pushX: x, pushZ: halfD - 0.45, radius, label: 'fence' };
                 }
             }
-            if (z < -outerHalfD) {
-                return { hit: true, pushX: x, pushZ: -outerHalfD, radius, label: 'fence' };
-            }
-            if (x > outerHalfW) {
-                return { hit: true, pushX: outerHalfW, pushZ: z, radius, label: 'fence' };
-            }
-            if (x < -outerHalfW) {
-                return { hit: true, pushX: -outerHalfW, pushZ: z, radius, label: 'fence' };
-            }
+            if (z < -outerHalfD) return { hit: true, pushX: x, pushZ: -outerHalfD, radius, label: 'fence' };
+            if (x > outerHalfW) return { hit: true, pushX: outerHalfW, pushZ: z, radius, label: 'fence' };
+            if (x < -outerHalfW) return { hit: true, pushX: -outerHalfW, pushZ: z, radius, label: 'fence' };
             return { hit: false };
         }
 
@@ -795,7 +1032,6 @@
             captureOrbitOrientation();
             controls.enabled = false;
             renderer.domElement.requestPointerLock();
-            // Reset velocity
             fpsState.velocity.set(0, 0, 0);
             updateHUD();
         }
@@ -807,88 +1043,59 @@
             const dir = new THREE.Vector3();
             camera.getWorldDirection(dir);
             controls.target.add(dir.multiplyScalar(5));
-            controls.target.y = 1.5;
+            controls.target.y = Math.max(controls.target.y, 1);
             controls.update();
             document.exitPointerLock();
             updateHUD();
         }
 
-        // Toggle first-person mode with F key
         document.addEventListener('keydown', (e) => {
             if (e.code === 'KeyF' && !e.repeat) {
-                if (isFirstPerson) {
-                    exitFirstPerson();
-                } else {
-                    enterFirstPerson();
-                }
+                if (isFirstPerson) { exitFirstPerson(); }
+                else { enterFirstPerson(); }
                 return;
             }
-
-            // Track movement keys
             const key = e.key.toLowerCase();
-            if (key in keys) {
-                keys[key] = true;
-            }
-            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
-                keys.shift = true;
-            }
+            if (key in keys) { keys[key] = true; }
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { keys.shift = true; }
         });
 
         document.addEventListener('keyup', (e) => {
             const key = e.key.toLowerCase();
-            if (key in keys) {
-                keys[key] = false;
-            }
-            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
-                keys.shift = false;
-            }
+            if (key in keys) { keys[key] = false; }
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { keys.shift = false; }
         });
 
-        // Pointer lock change
         document.addEventListener('pointerlockchange', () => {
             if (document.pointerLockElement !== renderer.domElement && isFirstPerson) {
-                // User pressed Escape — revert to orbit mode
                 exitFirstPerson();
             }
         });
 
-        // Mouse look
         document.addEventListener('mousemove', (e) => {
             if (!isFirstPerson || document.pointerLockElement !== renderer.domElement) return;
-
             const sensitivity = 0.002;
             fpsState.yaw -= e.movementX * sensitivity;
             fpsState.pitch -= e.movementY * sensitivity;
-            // Clamp pitch to prevent flipping
             fpsState.pitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, fpsState.pitch));
         });
 
-        // ──────────────────────────────────
+        // ══════════════════════════════════════════════
         // ANIMATION LOOP
-        // ──────────────────────────────────
+        // ══════════════════════════════════════════════
         const clock = new THREE.Clock();
 
         function animate() {
             requestAnimationFrame(animate);
 
-            const delta = Math.min(clock.getDelta(), 0.1); // cap to avoid jumps on tab switch
+            const delta = Math.min(clock.getDelta(), 0.1);
             const time = clock.elapsedTime;
 
             if (isFirstPerson) {
                 // ── First-person movement ──
                 const speed = fpsState.moveSpeed * (keys.shift ? 1.8 : 1.0) * delta;
-
-                // Calculate movement direction from yaw (horizontal only)
-                const forward = new THREE.Vector3(
-                    Math.sin(fpsState.yaw),
-                    0,
-                    Math.cos(fpsState.yaw)
-                );
-                const right = new THREE.Vector3(
-                    Math.cos(fpsState.yaw),
-                    0,
-                    -Math.sin(fpsState.yaw)
-                );
+                const forward = new THREE.Vector3(Math.sin(fpsState.yaw), 0, Math.cos(fpsState.yaw));
+                const right = new THREE.Vector3(Math.cos(fpsState.yaw), 0, -Math.sin(fpsState.yaw));
 
                 const moveDir = new THREE.Vector3();
                 if (keys.w) moveDir.add(forward);
@@ -900,33 +1107,22 @@
                     moveDir.normalize().multiplyScalar(speed);
                 }
 
-                // Apply movement with collision
                 const newX = camera.position.x + moveDir.x;
                 const newZ = camera.position.z + moveDir.z;
                 const col = checkCollision(newX, newZ, 0.4);
 
                 if (col.hit) {
-                    // Slide along obstacle
-                    // Try X only
                     const colX = checkCollision(newX, camera.position.z, 0.4);
-                    if (!colX.hit) {
-                        camera.position.x = newX;
-                    }
-                    // Try Z only
+                    if (!colX.hit) camera.position.x = newX;
                     const colZ = checkCollision(camera.position.x, newZ, 0.4);
-                    if (!colZ.hit) {
-                        camera.position.z = newZ;
-                    }
+                    if (!colZ.hit) camera.position.z = newZ;
                 } else {
                     camera.position.x = newX;
                     camera.position.z = newZ;
                 }
 
-                // Terrain following
-                const groundY = getGroundHeight(camera.position.x, camera.position.z);
-                camera.position.y = groundY + fpsState.eyeHeight;
+                camera.position.y = getGroundHeight(camera.position.x, camera.position.z) + fpsState.eyeHeight;
 
-                // Update camera rotation from yaw/pitch
                 const lookTarget = new THREE.Vector3(
                     camera.position.x + Math.sin(fpsState.yaw) * Math.cos(fpsState.pitch),
                     camera.position.y + Math.sin(fpsState.pitch),
@@ -934,6 +1130,20 @@
                 );
                 camera.lookAt(lookTarget);
             } else {
+                // ── God mode: WASD pans the camera target ──
+                const panSpeed = 6 * delta;
+                const forward = new THREE.Vector3();
+                camera.getWorldDirection(forward);
+                forward.y = 0;
+                forward.normalize();
+                const right = new THREE.Vector3();
+                right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+                if (keys.w) controls.target.add(forward.clone().multiplyScalar(panSpeed));
+                if (keys.s) controls.target.add(forward.clone().multiplyScalar(-panSpeed));
+                if (keys.a) controls.target.add(right.clone().multiplyScalar(-panSpeed));
+                if (keys.d) controls.target.add(right.clone().multiplyScalar(panSpeed));
+
                 controls.update();
             }
 
@@ -942,28 +1152,36 @@
                 bed.children.forEach((plant, plantIdx) => {
                     if (plant.isMesh) return;
                     const phase = bedIdx * 0.7 + plantIdx * 0.15;
-                    const sway = Math.sin(time * 1.5 + phase) * 0.06;
-                    plant.rotation.z += (sway - plant.rotation.z) * 0.1;
+                    const sway = Math.sin(time * 1.2 + phase) * 0.07;
+                    plant.rotation.z += (sway - plant.rotation.z) * 0.08;
                     if (bed.userData.cropType !== 'pumpkin') {
-                        plant.rotation.x += (Math.cos(time * 1.5 + phase) * 0.04 - plant.rotation.x) * 0.1;
+                        plant.rotation.x += (Math.cos(time * 1.2 + phase) * 0.05 - plant.rotation.x) * 0.08;
                     }
                 });
             });
 
             // Cloud drift
             cloudGroups.forEach((cloud, i) => {
-                cloud.position.x = cloud.userData.startX + Math.sin(time * 0.1 + i) * 4;
-                cloud.position.z = cloud.userData.startZ + Math.cos(time * 0.08 + i) * 2;
+                cloud.position.x = cloud.userData.startX + Math.sin(time * 0.08 + i) * 5;
+                cloud.position.z = cloud.userData.startZ + Math.cos(time * 0.06 + i) * 3;
             });
 
             // Bird flight
             birdGroup.children.forEach(bird => {
                 const angle = time * bird.userData.speed + bird.userData.phase;
-                bird.position.x += Math.cos(angle * 0.7) * 0.01;
-                bird.position.z += Math.sin(angle * 0.7) * 0.01;
-                bird.position.y = bird.userData.baseY + Math.sin(angle * 0.5) * 0.5;
-                bird.rotation.y = angle * 0.7;
+                bird.position.x = bird.userData.baseX + Math.cos(angle) * bird.userData.radius;
+                bird.position.z = bird.userData.baseZ + Math.sin(angle * 0.7) * bird.userData.radius * 0.6;
+                bird.position.y = bird.userData.baseY + Math.sin(angle * 0.5) * 0.6;
+                bird.rotation.y = angle + Math.PI / 2;
             });
+
+            // Dog animation
+            if (dogGroup.userData) {
+                const dt = time + dogGroup.userData.animTime;
+                dogGroup.position.x = dogGroup.userData.baseX + Math.sin(dt * 0.3) * 0.8;
+                dogGroup.position.z = dogGroup.userData.baseZ + Math.cos(dt * 0.4) * 0.6;
+                dogGroup.rotation.y = Math.sin(dt * 0.3) * 0.5;
+            }
 
             renderer.render(scene, camera);
         }
@@ -982,7 +1200,7 @@
         // ──────────────────────────────────
         animate();
         updateHUD();
-        console.log('Farm is ready! Drag to orbit, scroll to zoom. Press F for first-person mode.');
+        console.log('Farm v2 is ready! F = first person, WASD = move, scroll = zoom.');
     </script>
 </body>
 </html>
