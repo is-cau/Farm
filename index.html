@@ -6,11 +6,63 @@
     <title>3D Farm</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { overflow: hidden; background: #000; }
+        body { overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
         canvas { display: block; }
+
+        #hud {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            background: rgba(0,0,0,0.55);
+            padding: 10px 24px;
+            border-radius: 24px;
+            pointer-events: none;
+            z-index: 10;
+            font-size: 14px;
+            letter-spacing: 0.5px;
+            transition: opacity 0.3s;
+            text-align: center;
+        }
+        #hud .mode { font-weight: 700; color: #FFD700; }
+        #hud .hint { font-size: 12px; opacity: 0.75; margin-top: 2px; }
+
+        #crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 10;
+            display: none;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255,255,255,0.4);
+        }
+        #crosshair::before {
+            width: 2px;
+            height: 14px;
+            left: -1px;
+            top: -7px;
+        }
+        #crosshair::after {
+            width: 14px;
+            height: 2px;
+            left: -7px;
+            top: -1px;
+        }
     </style>
 </head>
 <body>
+    <div id="hud">
+        <div><span class="mode">🎥 上帝视角</span></div>
+        <div class="hint">按 <b>F</b> 切换第一人称 | 拖拽旋转 · 滚轮缩放</div>
+    </div>
+    <div id="crosshair"></div>
+
     <script type="importmap">
         {
             "imports": {
@@ -55,6 +107,44 @@
         controls.update();
 
         // ──────────────────────────────────
+        // FIRST-PERSON STATE
+        // ──────────────────────────────────
+        let isFirstPerson = false;
+        const fpsState = {
+            yaw: -Math.PI / 4,
+            pitch: -0.25,
+            velocity: new THREE.Vector3(),
+            moveSpeed: 6.0,
+            eyeHeight: 1.6,
+        };
+        const keys = { w: false, a: false, s: false, d: false, shift: false };
+        const buildings = []; // populated below for collision
+
+        // Set initial FPS orientation from orbit camera
+        function captureOrbitOrientation() {
+            const dir = new THREE.Vector3();
+            camera.getWorldDirection(dir);
+            fpsState.yaw = Math.atan2(dir.x, dir.z);
+            fpsState.pitch = Math.asin(dir.y);
+        }
+
+        // HUD refs
+        const hudEl = document.getElementById('hud');
+        const crosshairEl = document.getElementById('crosshair');
+
+        function updateHUD() {
+            if (isFirstPerson) {
+                hudEl.innerHTML = '<div><span class="mode">🚶 第一人称</span></div>'
+                    + '<div class="hint">按 <b>F</b> 返回上帝视角 | WASD 移动 · 鼠标环顾 · Shift 加速</div>';
+                crosshairEl.style.display = 'block';
+            } else {
+                hudEl.innerHTML = '<div><span class="mode">🎥 上帝视角</span></div>'
+                    + '<div class="hint">按 <b>F</b> 切换第一人称 | 拖拽旋转 · 滚轮缩放</div>';
+                crosshairEl.style.display = 'none';
+            }
+        }
+
+        // ──────────────────────────────────
         // LIGHTING
         // ──────────────────────────────────
         const ambientLight = new THREE.AmbientLight(0x6688CC, 0.6);
@@ -77,9 +167,6 @@
         sunLight.shadow.bias = -0.0001;
         sunLight.shadow.normalBias = 0.02;
         scene.add(sunLight);
-
-        // Uncomment to debug shadow camera:
-        // scene.add(new THREE.CameraHelper(sunLight.shadow.camera));
 
         // ──────────────────────────────────
         // MATERIALS (shared)
@@ -107,7 +194,6 @@
         // ──────────────────────────────────
         const groundGeo = new THREE.PlaneGeometry(40, 40, 40, 40);
         groundGeo.rotateX(-Math.PI / 2);
-        // Gentle height variation
         const posAttr = groundGeo.attributes.position;
         for (let i = 0; i < posAttr.count; i++) {
             const x = posAttr.getX(i);
@@ -122,6 +208,31 @@
         ground.name = 'ground';
         scene.add(ground);
 
+        // Ground height sampler for first-person terrain following
+        const groundPositions = groundGeo.attributes.position;
+        function getGroundHeight(x, z) {
+            // The ground is a 40x40 plane centered at origin, rotated -PI/2
+            // After rotation: the original plane XY maps to world XZ, original Z maps to world Y
+            // Vertices are stored in world space after rotateX
+            // We can just find nearest vertex and interpolate
+            let bestDist = Infinity;
+            let bestY = 0;
+            // Brute-force nearest-neighbor is fine for 41x41 = 1681 vertices
+            for (let i = 0; i < groundPositions.count; i++) {
+                const vx = groundPositions.getX(i);
+                const vz = groundPositions.getZ(i);
+                const vy = groundPositions.getY(i);
+                const dx = vx - x;
+                const dz = vz - z;
+                const dist = dx * dx + dz * dz;
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestY = vy;
+                }
+            }
+            return bestY;
+        }
+
         // ──────────────────────────────────
         // DIRT PATH
         // ──────────────────────────────────
@@ -132,7 +243,6 @@
         path.receiveShadow = true;
         scene.add(path);
 
-        // Small dirt patches near barn entrance
         for (let i = 0; i < 3; i++) {
             const patchGeo = new THREE.CircleGeometry(0.5 + Math.random() * 0.5, 16);
             patchGeo.rotateX(-Math.PI / 2);
@@ -147,32 +257,26 @@
         // ──────────────────────────────────
         const barnGroup = new THREE.Group();
 
-        // Main body
         const barnBody = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 6), barnBodyMat);
         barnBody.position.y = 1.5;
         barnBody.castShadow = true;
         barnBody.receiveShadow = true;
         barnGroup.add(barnBody);
 
-        // Roof (4-sided cone/pyramid)
-        const roofGeo = new THREE.ConeGeometry(3, 2, 4);
-        const roof = new THREE.Mesh(roofGeo, barnRoofMat);
-        roof.position.y = 3.0 + 1.0; // body top + half roof height
+        const roof = new THREE.Mesh(new THREE.ConeGeometry(3, 2, 4), barnRoofMat);
+        roof.position.y = 4.0;
         roof.rotation.y = Math.PI / 4;
         roof.castShadow = true;
         roof.receiveShadow = true;
         barnGroup.add(roof);
 
-        // Roof ridge beam
         const ridgeBeam = new THREE.Mesh(
-            new THREE.BoxGeometry(0.15, 0.15, 6.2),
-            darkWoodMat
+            new THREE.BoxGeometry(0.15, 0.15, 6.2), darkWoodMat
         );
-        ridgeBeam.position.y = 3.0 + 1.85;
+        ridgeBeam.position.y = 4.85;
         ridgeBeam.castShadow = true;
         barnGroup.add(ridgeBeam);
 
-        // Front door (double door)
         const doorGeo1 = new THREE.BoxGeometry(0.45, 2.0, 0.1);
         const door1 = new THREE.Mesh(doorGeo1, darkWoodMat);
         door1.position.set(-0.24, 1.0, 3.05);
@@ -184,66 +288,39 @@
         door2.castShadow = true;
         barnGroup.add(door2);
 
-        // Door frame cross beam
         const frameTop = new THREE.Mesh(
-            new THREE.BoxGeometry(1.0, 0.1, 0.1),
-            woodMat
+            new THREE.BoxGeometry(1.0, 0.1, 0.1), woodMat
         );
         frameTop.position.set(0, 2.05, 3.05);
         frameTop.castShadow = true;
         barnGroup.add(frameTop);
 
-        // Windows on side walls
         function createWindow(x, y, z, ry) {
             const winGroup = new THREE.Group();
-            const frame = new THREE.Mesh(
-                new THREE.BoxGeometry(0.7, 0.7, 0.06),
-                woodMat
-            );
+            const frame = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.06), woodMat);
             frame.castShadow = true;
             winGroup.add(frame);
-
-            const pane = new THREE.Mesh(
-                new THREE.BoxGeometry(0.5, 0.5, 0.02),
-                windowMat
-            );
+            const pane = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.02), windowMat);
             pane.position.z = 0.02;
             winGroup.add(pane);
-
-            // Cross bars
-            const hBar = new THREE.Mesh(
-                new THREE.BoxGeometry(0.5, 0.04, 0.04),
-                woodMat
-            );
+            const hBar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.04), woodMat);
             hBar.position.z = 0.03;
             winGroup.add(hBar);
-
-            const vBar = new THREE.Mesh(
-                new THREE.BoxGeometry(0.04, 0.5, 0.04),
-                woodMat
-            );
+            const vBar = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.04), woodMat);
             vBar.position.z = 0.03;
             winGroup.add(vBar);
-
             winGroup.position.set(x, y, z);
             winGroup.rotation.y = ry;
             return winGroup;
         }
 
-        const winLeft = createWindow(-2.05, 2.2, 0, 0);
-        barnGroup.add(winLeft);
-        const winRight = createWindow(2.05, 2.2, 0, 0);
-        barnGroup.add(winRight);
+        barnGroup.add(createWindow(-2.05, 2.2, 0, 0));
+        barnGroup.add(createWindow(2.05, 2.2, 0, 0));
 
-        // Hay loft window (front, above door)
-        const loftFrame = new THREE.Mesh(
-            new THREE.BoxGeometry(0.8, 0.6, 0.06),
-            woodMat
-        );
+        const loftFrame = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.06), woodMat);
         loftFrame.position.set(0, 2.9, 3.05);
         loftFrame.castShadow = true;
         barnGroup.add(loftFrame);
-
         const loftPane = new THREE.Mesh(
             new THREE.BoxGeometry(0.5, 0.4, 0.02),
             new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 })
@@ -253,22 +330,23 @@
 
         barnGroup.position.set(0, 0, -2);
         scene.add(barnGroup);
+        // Collision box for barn (world space AABB)
+        buildings.push({
+            minX: barnGroup.position.x - 2, maxX: barnGroup.position.x + 2,
+            minZ: barnGroup.position.z - 3, maxZ: barnGroup.position.z + 3,
+            label: 'barn'
+        });
 
         // ──────────────────────────────────
         // SILO
         // ──────────────────────────────────
         const siloGroup = new THREE.Group();
-
-        const siloBody = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.8, 0.8, 5, 32),
-            siloMat
-        );
+        const siloBody = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 5, 32), siloMat);
         siloBody.position.y = 2.5;
         siloBody.castShadow = true;
         siloBody.receiveShadow = true;
         siloGroup.add(siloBody);
 
-        // Silo dome roof
         const domeGeo = new THREE.SphereGeometry(0.8, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
         const dome = new THREE.Mesh(domeGeo, siloMat);
         dome.position.y = 5.0;
@@ -276,21 +354,13 @@
         dome.receiveShadow = true;
         siloGroup.add(dome);
 
-        // Silo base ring
-        const baseRing = new THREE.Mesh(
-            new THREE.TorusGeometry(0.82, 0.06, 8, 32),
-            darkWoodMat
-        );
+        const baseRing = new THREE.Mesh(new THREE.TorusGeometry(0.82, 0.06, 8, 32), darkWoodMat);
         baseRing.rotation.x = Math.PI / 2;
         baseRing.position.y = 0.05;
         baseRing.castShadow = true;
         siloGroup.add(baseRing);
 
-        // Silo top ring
-        const topRing = new THREE.Mesh(
-            new THREE.TorusGeometry(0.82, 0.06, 8, 32),
-            darkWoodMat
-        );
+        const topRing = new THREE.Mesh(new THREE.TorusGeometry(0.82, 0.06, 8, 32), darkWoodMat);
         topRing.rotation.x = Math.PI / 2;
         topRing.position.y = 4.98;
         topRing.castShadow = true;
@@ -298,32 +368,29 @@
 
         siloGroup.position.set(2.8, 0, -2);
         scene.add(siloGroup);
+        buildings.push({
+            minX: siloGroup.position.x - 0.8, maxX: siloGroup.position.x + 0.8,
+            minZ: siloGroup.position.z - 0.8, maxZ: siloGroup.position.z + 0.8,
+            label: 'silo'
+        });
 
         // ──────────────────────────────────
         // FARMHOUSE
         // ──────────────────────────────────
         const houseGroup = new THREE.Group();
-
-        const houseBody = new THREE.Mesh(
-            new THREE.BoxGeometry(2.5, 2, 3),
-            houseWallMat
-        );
+        const houseBody = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2, 3), houseWallMat);
         houseBody.position.y = 1.0;
         houseBody.castShadow = true;
         houseBody.receiveShadow = true;
         houseGroup.add(houseBody);
 
-        const houseRoof = new THREE.Mesh(
-            new THREE.ConeGeometry(1.8, 1.2, 4),
-            houseRoofMat
-        );
-        houseRoof.position.y = 2.0 + 0.6;
+        const houseRoof = new THREE.Mesh(new THREE.ConeGeometry(1.8, 1.2, 4), houseRoofMat);
+        houseRoof.position.y = 2.6;
         houseRoof.rotation.y = Math.PI / 4;
         houseRoof.castShadow = true;
         houseRoof.receiveShadow = true;
         houseGroup.add(houseRoof);
 
-        // Chimney
         const chimney = new THREE.Mesh(
             new THREE.BoxGeometry(0.25, 1.5, 0.25),
             new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.6, metalness: 0.0 })
@@ -332,55 +399,47 @@
         chimney.castShadow = true;
         houseGroup.add(chimney);
 
-        // House door
-        const houseDoor = new THREE.Mesh(
-            new THREE.BoxGeometry(0.55, 1.2, 0.08),
-            darkWoodMat
-        );
+        const houseDoor = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.2, 0.08), darkWoodMat);
         houseDoor.position.set(0, 0.6, 1.54);
         houseDoor.castShadow = true;
         houseGroup.add(houseDoor);
 
-        // House windows
         const hw1 = createWindow(-0.6, 1.3, 1.54, 0);
         hw1.scale.set(0.7, 0.7, 0.7);
         houseGroup.add(hw1);
-
         const hw2 = createWindow(0.6, 1.3, 1.54, 0);
         hw2.scale.set(0.7, 0.7, 0.7);
         houseGroup.add(hw2);
 
         houseGroup.position.set(-5, 0, -2);
         scene.add(houseGroup);
+        buildings.push({
+            minX: houseGroup.position.x - 1.25, maxX: houseGroup.position.x + 1.25,
+            minZ: houseGroup.position.z - 1.5, maxZ: houseGroup.position.z + 1.5,
+            label: 'house'
+        });
 
         // ──────────────────────────────────
         // TREES
         // ──────────────────────────────────
         function createTree(x, z, scale = 1.0) {
             const treeGroup = new THREE.Group();
-
             const trunkH = 2.5 * scale;
             const trunk = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.12 * scale, 0.2 * scale, trunkH, 8),
-                woodMat
+                new THREE.CylinderGeometry(0.12 * scale, 0.2 * scale, trunkH, 8), woodMat
             );
             trunk.position.y = trunkH / 2;
             trunk.castShadow = true;
             trunk.receiveShadow = true;
             treeGroup.add(trunk);
 
-            // Three-tier canopy
             const tiers = [
                 { r: 1.1 * scale, h: 1.8 * scale, y: trunkH + 0.6 * scale, mat: leafMat1 },
                 { r: 0.85 * scale, h: 1.6 * scale, y: trunkH + 1.2 * scale, mat: leafMat2 },
                 { r: 0.55 * scale, h: 1.3 * scale, y: trunkH + 1.7 * scale, mat: leafMat3 },
             ];
-
             tiers.forEach(t => {
-                const cone = new THREE.Mesh(
-                    new THREE.ConeGeometry(t.r, t.h, 8),
-                    t.mat
-                );
+                const cone = new THREE.Mesh(new THREE.ConeGeometry(t.r, t.h, 8), t.mat);
                 cone.position.y = t.y;
                 cone.castShadow = true;
                 cone.receiveShadow = true;
@@ -392,20 +451,22 @@
         }
 
         const treePositions = [
-            // Left side trees
             [-8.5, -5.5, 1.0], [-9.5, -2, 0.85], [-8.8, 2, 1.1], [-9.2, 5, 0.9],
-            // Right side trees
             [8.5, -5, 1.0], [9.5, -1.5, 0.8], [8.8, 3, 1.05], [9, 6, 0.95],
-            // Back trees
             [-4, -7, 1.1], [0, -7.5, 1.2], [4, -7, 1.0],
-            // Front trees (near house)
             [-7, 4, 0.85],
-            // Scattered
             [-3, 5.5, 0.7], [3, 5.5, 0.75], [7.5, -3, 0.9],
         ];
 
         treePositions.forEach(([x, z, s]) => {
-            scene.add(createTree(x, z, s));
+            const tree = createTree(x, z, s);
+            scene.add(tree);
+            // Tree collision (small radius trunk)
+            buildings.push({
+                minX: x - 0.2 * s, maxX: x + 0.2 * s,
+                minZ: z - 0.2 * s, maxZ: z + 0.2 * s,
+                label: 'tree'
+            });
         });
 
         // ──────────────────────────────────
@@ -426,17 +487,14 @@
             const dx = x2 - x1;
             const dz = z2 - z1;
             const length = Math.sqrt(dx * dx + dz * dz);
-            const rail = new THREE.Mesh(
-                new THREE.BoxGeometry(length, 0.05, 0.04),
-                woodMat
-            );
+            const rail = new THREE.Mesh(new THREE.BoxGeometry(length, 0.05, 0.04), woodMat);
             rail.position.set((x1 + x2) / 2, y, (z1 + z2) / 2);
             rail.rotation.y = Math.atan2(dx, dz);
             rail.castShadow = true;
             fenceGroup.add(rail);
         }
 
-        function buildFenceSide(points, startIdx) {
+        function buildFenceSide(points) {
             for (let i = 0; i < points.length - 1; i++) {
                 const [x1, z1] = points[i];
                 const [x2, z2] = points[i + 1];
@@ -444,10 +502,8 @@
                 addFenceRail(x1, z1, x2, z2, 0.5);
                 addFenceRail(x1, z1, x2, z2, 0.9);
             }
-            // Last post
             const [lx, lz] = points[points.length - 1];
             addFencePost(lx, lz);
-            // Connect last segment rails
             if (points.length >= 2) {
                 const [px, pz] = points[points.length - 2];
                 addFenceRail(px, pz, lx, lz, 0.5);
@@ -455,17 +511,14 @@
             }
         }
 
-        // Fence perimeter: rectangle 17x13, centered at (0, 0, 0)
         const halfW = 8.5;
         const halfD = 6.5;
         const spacing = 1.5;
 
-        // Back side (z = -halfD)
         const backPoints = [];
         for (let x = -halfW; x <= halfW; x += spacing) backPoints.push([x, -halfD]);
         buildFenceSide(backPoints);
 
-        // Front side (z = halfD) — with gate gap in center
         const frontLeft = [];
         for (let x = -halfW; x <= -1.2; x += spacing) frontLeft.push([x, halfD]);
         buildFenceSide(frontLeft);
@@ -473,17 +526,14 @@
         for (let x = 1.2; x <= halfW; x += spacing) frontRight.push([x, halfD]);
         buildFenceSide(frontRight);
 
-        // Left side (x = -halfW) — between back and front
         const leftPoints = [];
         for (let z = -halfD + spacing; z < halfD; z += spacing) leftPoints.push([-halfW, z]);
         buildFenceSide(leftPoints);
 
-        // Right side (x = halfW) — between back and front
         const rightPoints = [];
         for (let z = -halfD + spacing; z < halfD; z += spacing) rightPoints.push([halfW, z]);
         buildFenceSide(rightPoints);
 
-        // Gate posts (thicker)
         const gatePostGeo = new THREE.CylinderGeometry(0.1, 0.12, 1.3, 8);
         [-1.2, 1.2].forEach(gx => {
             const gp = new THREE.Mesh(gatePostGeo, darkWoodMat);
@@ -491,38 +541,31 @@
             gp.castShadow = true;
             gp.receiveShadow = true;
             fenceGroup.add(gp);
-            const gpTop = new THREE.Mesh(
-                new THREE.SphereGeometry(0.12, 8, 4),
-                darkWoodMat
-            );
+            const gpTop = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 4), darkWoodMat);
             gpTop.position.set(gx, 1.32, halfD);
             gpTop.castShadow = true;
             fenceGroup.add(gpTop);
         });
 
         scene.add(fenceGroup);
+        // Fence collision: add fence posts as small collision cylinders
+        // We'll treat the entire perimeter as a boundary for simplicity
+        // Inner fence boundary (gate is open, so no collision at gate)
+        const FENCE_INNER_MARGIN = 0.3;
 
         // ──────────────────────────────────
         // CROP BEDS
         // ──────────────────────────────────
-        const cropGroups = []; // for wind animation
+        const cropGroups = [];
 
         function createCornStalk() {
             const group = new THREE.Group();
-            const stalk = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.04, 0.06, 1.0, 6),
-                cornMat
-            );
+            const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 1.0, 6), cornMat);
             stalk.position.y = 0.5;
             stalk.castShadow = true;
             group.add(stalk);
-
-            // Leaves
             for (let i = 0; i < 3; i++) {
-                const leaf = new THREE.Mesh(
-                    new THREE.BoxGeometry(0.015, 0.25, 0.015),
-                    cornMat
-                );
+                const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.25, 0.015), cornMat);
                 leaf.position.y = 0.3 + i * 0.25;
                 leaf.rotation.z = (0.5 + i * 0.3) * (i % 2 === 0 ? 1 : -1);
                 leaf.rotation.x = 0.2;
@@ -541,11 +584,7 @@
             stem.position.y = 0.25;
             stem.castShadow = true;
             group.add(stem);
-
-            const head = new THREE.Mesh(
-                new THREE.ConeGeometry(0.06, 0.2, 4),
-                wheatMat
-            );
+            const head = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.2, 4), wheatMat);
             head.position.y = 0.6;
             head.castShadow = true;
             group.add(head);
@@ -554,16 +593,12 @@
 
         function createPumpkin() {
             const group = new THREE.Group();
-            const body = new THREE.Mesh(
-                new THREE.SphereGeometry(0.12, 8, 6),
-                pumpkinMat
-            );
+            const body = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), pumpkinMat);
             body.scale.set(1, 0.6, 1);
             body.position.y = 0.07;
             body.castShadow = true;
             body.receiveShadow = true;
             group.add(body);
-
             const stem = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.02, 0.03, 0.1, 5),
                 new THREE.MeshStandardMaterial({ color: 0x228B22, roughness: 0.8 })
@@ -597,7 +632,6 @@
                 }
             }
 
-            // Soil base
             const soilGeo = new THREE.BoxGeometry(cols * spacingX + 0.2, 0.05, rows * spacingZ + 0.2);
             const soil = new THREE.Mesh(
                 soilGeo,
@@ -612,7 +646,6 @@
             return bedGroup;
         }
 
-        // Layout crop beds in the right-front area of the farm
         const cropBeds = [
             { x: 3, z: 3.5, type: 'corn', rows: 3, cols: 6 },
             { x: 5.5, z: 3.5, type: 'wheat', rows: 4, cols: 8 },
@@ -632,16 +665,12 @@
         // WATER TROUGH
         // ──────────────────────────────────
         const troughGroup = new THREE.Group();
-        const troughBody = new THREE.Mesh(
-            new THREE.BoxGeometry(1.5, 0.3, 0.6),
-            woodMat
-        );
+        const troughBody = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.3, 0.6), woodMat);
         troughBody.position.y = 0.3;
         troughBody.castShadow = true;
         troughBody.receiveShadow = true;
         troughGroup.add(troughBody);
 
-        // Water surface
         const waterGeo = new THREE.BoxGeometry(1.3, 0.02, 0.45);
         const water = new THREE.Mesh(
             waterGeo,
@@ -652,6 +681,11 @@
 
         troughGroup.position.set(3.5, 0, -4.5);
         scene.add(troughGroup);
+        buildings.push({
+            minX: troughGroup.position.x - 0.75, maxX: troughGroup.position.x + 0.75,
+            minZ: troughGroup.position.z - 0.3, maxZ: troughGroup.position.z + 0.3,
+            label: 'trough'
+        });
 
         // ──────────────────────────────────
         // CLOUDS
@@ -661,7 +695,6 @@
         function createCloud(cx, cy, cz, size) {
             const cloudGroup = new THREE.Group();
             const sphereGeo = new THREE.SphereGeometry(1, 8, 6);
-
             const offsets = [
                 [0, 0, 0, 1.0],
                 [0.7, 0.15, 0.2, 0.8],
@@ -670,14 +703,12 @@
                 [-0.35, 0.2, -0.45, 0.75],
                 [0.0, -0.15, 0.6, 0.65],
             ];
-
             offsets.forEach(([ox, oy, oz, s]) => {
                 const blob = new THREE.Mesh(sphereGeo, cloudMat);
                 blob.position.set(ox * size, oy * size, oz * size);
                 blob.scale.set(size * s, size * s * 0.6, size * s);
                 cloudGroup.add(blob);
             });
-
             cloudGroup.position.set(cx, cy, cz);
             cloudGroup.userData.startX = cx;
             cloudGroup.userData.startZ = cz;
@@ -694,13 +725,12 @@
             [2, 17, 7, 0.85],
             [-3, 15, -3, 0.7],
         ];
-
         clouds.forEach(([x, y, z, s]) => {
             scene.add(createCloud(x, y, z, s));
         });
 
         // ──────────────────────────────────
-        // BIRDS (simple V shapes)
+        // BIRDS
         // ──────────────────────────────────
         const birdGroup = new THREE.Group();
         const birdGeo = new THREE.ConeGeometry(0.08, 0.05, 4);
@@ -723,6 +753,116 @@
         }
         scene.add(birdGroup);
 
+        // ══════════════════════════════════════════════
+        // FIRST-PERSON MODE EVENT HANDLERS
+        // ══════════════════════════════════════════════
+        function checkCollision(x, z, radius = 0.35) {
+            for (const b of buildings) {
+                const closestX = Math.max(b.minX, Math.min(x, b.maxX));
+                const closestZ = Math.max(b.minZ, Math.min(z, b.maxZ));
+                const dx = x - closestX;
+                const dz = z - closestZ;
+                if (dx * dx + dz * dz < radius * radius) {
+                    return { hit: true, pushX: closestX, pushZ: closestZ, radius, label: b.label };
+                }
+            }
+            // Fence boundary (hard outer perimeter)
+            const outerHalfW = halfW + FENCE_INNER_MARGIN;
+            const outerHalfD = halfD + FENCE_INNER_MARGIN;
+            // Gate opening: gap between -1.2 and 1.2 at z = halfD
+            // Allow passing through gate
+            if (z > halfD - 0.3 && (x < -1.5 || x > 1.5)) {
+                // Hit fence on front side (except gate)
+                const pushZ = halfD - 0.3;
+                if (Math.abs(z - pushZ) < radius + 1.0) {
+                    return { hit: true, pushX: x, pushZ, radius, label: 'fence' };
+                }
+            }
+            if (z < -outerHalfD) {
+                return { hit: true, pushX: x, pushZ: -outerHalfD, radius, label: 'fence' };
+            }
+            if (x > outerHalfW) {
+                return { hit: true, pushX: outerHalfW, pushZ: z, radius, label: 'fence' };
+            }
+            if (x < -outerHalfW) {
+                return { hit: true, pushX: -outerHalfW, pushZ: z, radius, label: 'fence' };
+            }
+            return { hit: false };
+        }
+
+        function enterFirstPerson() {
+            isFirstPerson = true;
+            captureOrbitOrientation();
+            controls.enabled = false;
+            renderer.domElement.requestPointerLock();
+            // Reset velocity
+            fpsState.velocity.set(0, 0, 0);
+            updateHUD();
+        }
+
+        function exitFirstPerson() {
+            isFirstPerson = false;
+            controls.enabled = true;
+            controls.target.copy(camera.position);
+            const dir = new THREE.Vector3();
+            camera.getWorldDirection(dir);
+            controls.target.add(dir.multiplyScalar(5));
+            controls.target.y = 1.5;
+            controls.update();
+            document.exitPointerLock();
+            updateHUD();
+        }
+
+        // Toggle first-person mode with F key
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'KeyF' && !e.repeat) {
+                if (isFirstPerson) {
+                    exitFirstPerson();
+                } else {
+                    enterFirstPerson();
+                }
+                return;
+            }
+
+            // Track movement keys
+            const key = e.key.toLowerCase();
+            if (key in keys) {
+                keys[key] = true;
+            }
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                keys.shift = true;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if (key in keys) {
+                keys[key] = false;
+            }
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                keys.shift = false;
+            }
+        });
+
+        // Pointer lock change
+        document.addEventListener('pointerlockchange', () => {
+            if (document.pointerLockElement !== renderer.domElement && isFirstPerson) {
+                // User pressed Escape — revert to orbit mode
+                exitFirstPerson();
+            }
+        });
+
+        // Mouse look
+        document.addEventListener('mousemove', (e) => {
+            if (!isFirstPerson || document.pointerLockElement !== renderer.domElement) return;
+
+            const sensitivity = 0.002;
+            fpsState.yaw -= e.movementX * sensitivity;
+            fpsState.pitch -= e.movementY * sensitivity;
+            // Clamp pitch to prevent flipping
+            fpsState.pitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, fpsState.pitch));
+        });
+
         // ──────────────────────────────────
         // ANIMATION LOOP
         // ──────────────────────────────────
@@ -731,13 +871,76 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            const time = clock.getElapsedTime();
-            controls.update();
+            const delta = Math.min(clock.getDelta(), 0.1); // cap to avoid jumps on tab switch
+            const time = clock.elapsedTime;
+
+            if (isFirstPerson) {
+                // ── First-person movement ──
+                const speed = fpsState.moveSpeed * (keys.shift ? 1.8 : 1.0) * delta;
+
+                // Calculate movement direction from yaw (horizontal only)
+                const forward = new THREE.Vector3(
+                    Math.sin(fpsState.yaw),
+                    0,
+                    Math.cos(fpsState.yaw)
+                );
+                const right = new THREE.Vector3(
+                    Math.cos(fpsState.yaw),
+                    0,
+                    -Math.sin(fpsState.yaw)
+                );
+
+                const moveDir = new THREE.Vector3();
+                if (keys.w) moveDir.add(forward);
+                if (keys.s) moveDir.sub(forward);
+                if (keys.a) moveDir.sub(right);
+                if (keys.d) moveDir.add(right);
+
+                if (moveDir.length() > 0) {
+                    moveDir.normalize().multiplyScalar(speed);
+                }
+
+                // Apply movement with collision
+                const newX = camera.position.x + moveDir.x;
+                const newZ = camera.position.z + moveDir.z;
+                const col = checkCollision(newX, newZ, 0.4);
+
+                if (col.hit) {
+                    // Slide along obstacle
+                    // Try X only
+                    const colX = checkCollision(newX, camera.position.z, 0.4);
+                    if (!colX.hit) {
+                        camera.position.x = newX;
+                    }
+                    // Try Z only
+                    const colZ = checkCollision(camera.position.x, newZ, 0.4);
+                    if (!colZ.hit) {
+                        camera.position.z = newZ;
+                    }
+                } else {
+                    camera.position.x = newX;
+                    camera.position.z = newZ;
+                }
+
+                // Terrain following
+                const groundY = getGroundHeight(camera.position.x, camera.position.z);
+                camera.position.y = groundY + fpsState.eyeHeight;
+
+                // Update camera rotation from yaw/pitch
+                const lookTarget = new THREE.Vector3(
+                    camera.position.x + Math.sin(fpsState.yaw) * Math.cos(fpsState.pitch),
+                    camera.position.y + Math.sin(fpsState.pitch),
+                    camera.position.z + Math.cos(fpsState.yaw) * Math.cos(fpsState.pitch)
+                );
+                camera.lookAt(lookTarget);
+            } else {
+                controls.update();
+            }
 
             // Wind effect on crops
             cropGroups.forEach((bed, bedIdx) => {
                 bed.children.forEach((plant, plantIdx) => {
-                    if (plant.isMesh) return; // skip soil base
+                    if (plant.isMesh) return;
                     const phase = bedIdx * 0.7 + plantIdx * 0.15;
                     const sway = Math.sin(time * 1.5 + phase) * 0.06;
                     plant.rotation.z += (sway - plant.rotation.z) * 0.1;
@@ -778,7 +981,8 @@
         // START
         // ──────────────────────────────────
         animate();
-        console.log('Farm is ready! Drag to orbit, scroll to zoom.');
+        updateHUD();
+        console.log('Farm is ready! Drag to orbit, scroll to zoom. Press F for first-person mode.');
     </script>
 </body>
 </html>
