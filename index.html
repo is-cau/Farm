@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Farm</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #000; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ──────────────────────────────────
+        // SCENE, RENDERER, CAMERA
+        // ──────────────────────────────────
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 30, 80);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.1;
+        document.body.appendChild(renderer.domElement);
+
+        const camera = new THREE.PerspectiveCamera(
+            50, window.innerWidth / window.innerHeight, 0.5, 100
+        );
+        camera.position.set(12, 10, 15);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 1.5, 0);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.minDistance = 5;
+        controls.maxDistance = 30;
+        controls.maxPolarAngle = Math.PI / 2 - 0.05;
+        controls.minPolarAngle = 0.2;
+        controls.update();
+
+        // ──────────────────────────────────
+        // LIGHTING
+        // ──────────────────────────────────
+        const ambientLight = new THREE.AmbientLight(0x6688CC, 0.6);
+        scene.add(ambientLight);
+
+        const hemisphereLight = new THREE.HemisphereLight(0x87CEEB, 0x4A7C2E, 0.4);
+        scene.add(hemisphereLight);
+
+        const sunLight = new THREE.DirectionalLight(0xFFF5E6, 3.5);
+        sunLight.position.set(10, 15, 5);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 80;
+        sunLight.shadow.camera.left = -20;
+        sunLight.shadow.camera.right = 20;
+        sunLight.shadow.camera.top = 20;
+        sunLight.shadow.camera.bottom = -20;
+        sunLight.shadow.bias = -0.0001;
+        sunLight.shadow.normalBias = 0.02;
+        scene.add(sunLight);
+
+        // Uncomment to debug shadow camera:
+        // scene.add(new THREE.CameraHelper(sunLight.shadow.camera));
+
+        // ──────────────────────────────────
+        // MATERIALS (shared)
+        // ──────────────────────────────────
+        const grassMat = new THREE.MeshStandardMaterial({ color: 0x4A7C2E, roughness: 0.9, metalness: 0.0 });
+        const dirtMat = new THREE.MeshStandardMaterial({ color: 0xC4A45A, roughness: 0.95, metalness: 0.0 });
+        const barnBodyMat = new THREE.MeshStandardMaterial({ color: 0xCC3333, roughness: 0.5, metalness: 0.05 });
+        const barnRoofMat = new THREE.MeshStandardMaterial({ color: 0x8B0000, roughness: 0.5, metalness: 0.05 });
+        const woodMat = new THREE.MeshStandardMaterial({ color: 0x8B5E3C, roughness: 0.7, metalness: 0.0 });
+        const darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x5C4033, roughness: 0.7, metalness: 0.0 });
+        const windowMat = new THREE.MeshStandardMaterial({ color: 0xADD8E6, roughness: 0.2, metalness: 0.1, emissive: 0x111111, emissiveIntensity: 0.3 });
+        const siloMat = new THREE.MeshStandardMaterial({ color: 0xC0C0C0, roughness: 0.3, metalness: 0.7 });
+        const leafMat1 = new THREE.MeshStandardMaterial({ color: 0x2D5A27, roughness: 0.8, metalness: 0.0 });
+        const leafMat2 = new THREE.MeshStandardMaterial({ color: 0x3A7D34, roughness: 0.8, metalness: 0.0 });
+        const leafMat3 = new THREE.MeshStandardMaterial({ color: 0x4A9E3F, roughness: 0.8, metalness: 0.0 });
+        const cornMat = new THREE.MeshStandardMaterial({ color: 0x5D8230, roughness: 0.8, metalness: 0.0 });
+        const wheatMat = new THREE.MeshStandardMaterial({ color: 0x7CB342, roughness: 0.8, metalness: 0.0 });
+        const pumpkinMat = new THREE.MeshStandardMaterial({ color: 0xFF6600, roughness: 0.6, metalness: 0.0 });
+        const cloudMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF, roughness: 1.0, metalness: 0.0 });
+        const houseWallMat = new THREE.MeshStandardMaterial({ color: 0xF5DEB3, roughness: 0.7, metalness: 0.0 });
+        const houseRoofMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.6, metalness: 0.0 });
+
+        // ──────────────────────────────────
+        // GROUND
+        // ──────────────────────────────────
+        const groundGeo = new THREE.PlaneGeometry(40, 40, 40, 40);
+        groundGeo.rotateX(-Math.PI / 2);
+        // Gentle height variation
+        const posAttr = groundGeo.attributes.position;
+        for (let i = 0; i < posAttr.count; i++) {
+            const x = posAttr.getX(i);
+            const z = posAttr.getZ(i);
+            const h = Math.sin(x * 0.3) * Math.cos(z * 0.3) * 0.4
+                    + Math.sin(x * 0.7 + 1.5) * Math.cos(z * 0.5) * 0.2;
+            posAttr.setY(i, h);
+        }
+        groundGeo.computeVertexNormals();
+        const ground = new THREE.Mesh(groundGeo, grassMat);
+        ground.receiveShadow = true;
+        ground.name = 'ground';
+        scene.add(ground);
+
+        // ──────────────────────────────────
+        // DIRT PATH
+        // ──────────────────────────────────
+        const pathGeo = new THREE.PlaneGeometry(2, 8);
+        pathGeo.rotateX(-Math.PI / 2);
+        const path = new THREE.Mesh(pathGeo, dirtMat);
+        path.position.set(0, 0.01, 2);
+        path.receiveShadow = true;
+        scene.add(path);
+
+        // Small dirt patches near barn entrance
+        for (let i = 0; i < 3; i++) {
+            const patchGeo = new THREE.CircleGeometry(0.5 + Math.random() * 0.5, 16);
+            patchGeo.rotateX(-Math.PI / 2);
+            const patch = new THREE.Mesh(patchGeo, dirtMat);
+            patch.position.set(-1.5 + i * 1.5, 0.008, 1.2 + Math.random() * 0.5);
+            patch.receiveShadow = true;
+            scene.add(patch);
+        }
+
+        // ──────────────────────────────────
+        // BARN
+        // ──────────────────────────────────
+        const barnGroup = new THREE.Group();
+
+        // Main body
+        const barnBody = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 6), barnBodyMat);
+        barnBody.position.y = 1.5;
+        barnBody.castShadow = true;
+        barnBody.receiveShadow = true;
+        barnGroup.add(barnBody);
+
+        // Roof (4-sided cone/pyramid)
+        const roofGeo = new THREE.ConeGeometry(3, 2, 4);
+        const roof = new THREE.Mesh(roofGeo, barnRoofMat);
+        roof.position.y = 3.0 + 1.0; // body top + half roof height
+        roof.rotation.y = Math.PI / 4;
+        roof.castShadow = true;
+        roof.receiveShadow = true;
+        barnGroup.add(roof);
+
+        // Roof ridge beam
+        const ridgeBeam = new THREE.Mesh(
+            new THREE.BoxGeometry(0.15, 0.15, 6.2),
+            darkWoodMat
+        );
+        ridgeBeam.position.y = 3.0 + 1.85;
+        ridgeBeam.castShadow = true;
+        barnGroup.add(ridgeBeam);
+
+        // Front door (double door)
+        const doorGeo1 = new THREE.BoxGeometry(0.45, 2.0, 0.1);
+        const door1 = new THREE.Mesh(doorGeo1, darkWoodMat);
+        door1.position.set(-0.24, 1.0, 3.05);
+        door1.castShadow = true;
+        barnGroup.add(door1);
+
+        const door2 = new THREE.Mesh(doorGeo1, darkWoodMat);
+        door2.position.set(0.24, 1.0, 3.05);
+        door2.castShadow = true;
+        barnGroup.add(door2);
+
+        // Door frame cross beam
+        const frameTop = new THREE.Mesh(
+            new THREE.BoxGeometry(1.0, 0.1, 0.1),
+            woodMat
+        );
+        frameTop.position.set(0, 2.05, 3.05);
+        frameTop.castShadow = true;
+        barnGroup.add(frameTop);
+
+        // Windows on side walls
+        function createWindow(x, y, z, ry) {
+            const winGroup = new THREE.Group();
+            const frame = new THREE.Mesh(
+                new THREE.BoxGeometry(0.7, 0.7, 0.06),
+                woodMat
+            );
+            frame.castShadow = true;
+            winGroup.add(frame);
+
+            const pane = new THREE.Mesh(
+                new THREE.BoxGeometry(0.5, 0.5, 0.02),
+                windowMat
+            );
+            pane.position.z = 0.02;
+            winGroup.add(pane);
+
+            // Cross bars
+            const hBar = new THREE.Mesh(
+                new THREE.BoxGeometry(0.5, 0.04, 0.04),
+                woodMat
+            );
+            hBar.position.z = 0.03;
+            winGroup.add(hBar);
+
+            const vBar = new THREE.Mesh(
+                new THREE.BoxGeometry(0.04, 0.5, 0.04),
+                woodMat
+            );
+            vBar.position.z = 0.03;
+            winGroup.add(vBar);
+
+            winGroup.position.set(x, y, z);
+            winGroup.rotation.y = ry;
+            return winGroup;
+        }
+
+        const winLeft = createWindow(-2.05, 2.2, 0, 0);
+        barnGroup.add(winLeft);
+        const winRight = createWindow(2.05, 2.2, 0, 0);
+        barnGroup.add(winRight);
+
+        // Hay loft window (front, above door)
+        const loftFrame = new THREE.Mesh(
+            new THREE.BoxGeometry(0.8, 0.6, 0.06),
+            woodMat
+        );
+        loftFrame.position.set(0, 2.9, 3.05);
+        loftFrame.castShadow = true;
+        barnGroup.add(loftFrame);
+
+        const loftPane = new THREE.Mesh(
+            new THREE.BoxGeometry(0.5, 0.4, 0.02),
+            new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 })
+        );
+        loftPane.position.set(0, 2.9, 3.09);
+        barnGroup.add(loftPane);
+
+        barnGroup.position.set(0, 0, -2);
+        scene.add(barnGroup);
+
+        // ──────────────────────────────────
+        // SILO
+        // ──────────────────────────────────
+        const siloGroup = new THREE.Group();
+
+        const siloBody = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.8, 0.8, 5, 32),
+            siloMat
+        );
+        siloBody.position.y = 2.5;
+        siloBody.castShadow = true;
+        siloBody.receiveShadow = true;
+        siloGroup.add(siloBody);
+
+        // Silo dome roof
+        const domeGeo = new THREE.SphereGeometry(0.8, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+        const dome = new THREE.Mesh(domeGeo, siloMat);
+        dome.position.y = 5.0;
+        dome.castShadow = true;
+        dome.receiveShadow = true;
+        siloGroup.add(dome);
+
+        // Silo base ring
+        const baseRing = new THREE.Mesh(
+            new THREE.TorusGeometry(0.82, 0.06, 8, 32),
+            darkWoodMat
+        );
+        baseRing.rotation.x = Math.PI / 2;
+        baseRing.position.y = 0.05;
+        baseRing.castShadow = true;
+        siloGroup.add(baseRing);
+
+        // Silo top ring
+        const topRing = new THREE.Mesh(
+            new THREE.TorusGeometry(0.82, 0.06, 8, 32),
+            darkWoodMat
+        );
+        topRing.rotation.x = Math.PI / 2;
+        topRing.position.y = 4.98;
+        topRing.castShadow = true;
+        siloGroup.add(topRing);
+
+        siloGroup.position.set(2.8, 0, -2);
+        scene.add(siloGroup);
+
+        // ──────────────────────────────────
+        // FARMHOUSE
+        // ──────────────────────────────────
+        const houseGroup = new THREE.Group();
+
+        const houseBody = new THREE.Mesh(
+            new THREE.BoxGeometry(2.5, 2, 3),
+            houseWallMat
+        );
+        houseBody.position.y = 1.0;
+        houseBody.castShadow = true;
+        houseBody.receiveShadow = true;
+        houseGroup.add(houseBody);
+
+        const houseRoof = new THREE.Mesh(
+            new THREE.ConeGeometry(1.8, 1.2, 4),
+            houseRoofMat
+        );
+        houseRoof.position.y = 2.0 + 0.6;
+        houseRoof.rotation.y = Math.PI / 4;
+        houseRoof.castShadow = true;
+        houseRoof.receiveShadow = true;
+        houseGroup.add(houseRoof);
+
+        // Chimney
+        const chimney = new THREE.Mesh(
+            new THREE.BoxGeometry(0.25, 1.5, 0.25),
+            new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.6, metalness: 0.0 })
+        );
+        chimney.position.set(0.5, 2.8, -0.5);
+        chimney.castShadow = true;
+        houseGroup.add(chimney);
+
+        // House door
+        const houseDoor = new THREE.Mesh(
+            new THREE.BoxGeometry(0.55, 1.2, 0.08),
+            darkWoodMat
+        );
+        houseDoor.position.set(0, 0.6, 1.54);
+        houseDoor.castShadow = true;
+        houseGroup.add(houseDoor);
+
+        // House windows
+        const hw1 = createWindow(-0.6, 1.3, 1.54, 0);
+        hw1.scale.set(0.7, 0.7, 0.7);
+        houseGroup.add(hw1);
+
+        const hw2 = createWindow(0.6, 1.3, 1.54, 0);
+        hw2.scale.set(0.7, 0.7, 0.7);
+        houseGroup.add(hw2);
+
+        houseGroup.position.set(-5, 0, -2);
+        scene.add(houseGroup);
+
+        // ──────────────────────────────────
+        // TREES
+        // ──────────────────────────────────
+        function createTree(x, z, scale = 1.0) {
+            const treeGroup = new THREE.Group();
+
+            const trunkH = 2.5 * scale;
+            const trunk = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.12 * scale, 0.2 * scale, trunkH, 8),
+                woodMat
+            );
+            trunk.position.y = trunkH / 2;
+            trunk.castShadow = true;
+            trunk.receiveShadow = true;
+            treeGroup.add(trunk);
+
+            // Three-tier canopy
+            const tiers = [
+                { r: 1.1 * scale, h: 1.8 * scale, y: trunkH + 0.6 * scale, mat: leafMat1 },
+                { r: 0.85 * scale, h: 1.6 * scale, y: trunkH + 1.2 * scale, mat: leafMat2 },
+                { r: 0.55 * scale, h: 1.3 * scale, y: trunkH + 1.7 * scale, mat: leafMat3 },
+            ];
+
+            tiers.forEach(t => {
+                const cone = new THREE.Mesh(
+                    new THREE.ConeGeometry(t.r, t.h, 8),
+                    t.mat
+                );
+                cone.position.y = t.y;
+                cone.castShadow = true;
+                cone.receiveShadow = true;
+                treeGroup.add(cone);
+            });
+
+            treeGroup.position.set(x, 0, z);
+            return treeGroup;
+        }
+
+        const treePositions = [
+            // Left side trees
+            [-8.5, -5.5, 1.0], [-9.5, -2, 0.85], [-8.8, 2, 1.1], [-9.2, 5, 0.9],
+            // Right side trees
+            [8.5, -5, 1.0], [9.5, -1.5, 0.8], [8.8, 3, 1.05], [9, 6, 0.95],
+            // Back trees
+            [-4, -7, 1.1], [0, -7.5, 1.2], [4, -7, 1.0],
+            // Front trees (near house)
+            [-7, 4, 0.85],
+            // Scattered
+            [-3, 5.5, 0.7], [3, 5.5, 0.75], [7.5, -3, 0.9],
+        ];
+
+        treePositions.forEach(([x, z, s]) => {
+            scene.add(createTree(x, z, s));
+        });
+
+        // ──────────────────────────────────
+        // FENCE SYSTEM
+        // ──────────────────────────────────
+        const fenceGroup = new THREE.Group();
+        const postGeo = new THREE.CylinderGeometry(0.07, 0.09, 1.2, 8);
+
+        function addFencePost(px, pz) {
+            const post = new THREE.Mesh(postGeo, woodMat);
+            post.position.set(px, 0.6, pz);
+            post.castShadow = true;
+            post.receiveShadow = true;
+            fenceGroup.add(post);
+        }
+
+        function addFenceRail(x1, z1, x2, z2, y) {
+            const dx = x2 - x1;
+            const dz = z2 - z1;
+            const length = Math.sqrt(dx * dx + dz * dz);
+            const rail = new THREE.Mesh(
+                new THREE.BoxGeometry(length, 0.05, 0.04),
+                woodMat
+            );
+            rail.position.set((x1 + x2) / 2, y, (z1 + z2) / 2);
+            rail.rotation.y = Math.atan2(dx, dz);
+            rail.castShadow = true;
+            fenceGroup.add(rail);
+        }
+
+        function buildFenceSide(points, startIdx) {
+            for (let i = 0; i < points.length - 1; i++) {
+                const [x1, z1] = points[i];
+                const [x2, z2] = points[i + 1];
+                addFencePost(x1, z1);
+                addFenceRail(x1, z1, x2, z2, 0.5);
+                addFenceRail(x1, z1, x2, z2, 0.9);
+            }
+            // Last post
+            const [lx, lz] = points[points.length - 1];
+            addFencePost(lx, lz);
+            // Connect last segment rails
+            if (points.length >= 2) {
+                const [px, pz] = points[points.length - 2];
+                addFenceRail(px, pz, lx, lz, 0.5);
+                addFenceRail(px, pz, lx, lz, 0.9);
+            }
+        }
+
+        // Fence perimeter: rectangle 17x13, centered at (0, 0, 0)
+        const halfW = 8.5;
+        const halfD = 6.5;
+        const spacing = 1.5;
+
+        // Back side (z = -halfD)
+        const backPoints = [];
+        for (let x = -halfW; x <= halfW; x += spacing) backPoints.push([x, -halfD]);
+        buildFenceSide(backPoints);
+
+        // Front side (z = halfD) — with gate gap in center
+        const frontLeft = [];
+        for (let x = -halfW; x <= -1.2; x += spacing) frontLeft.push([x, halfD]);
+        buildFenceSide(frontLeft);
+        const frontRight = [];
+        for (let x = 1.2; x <= halfW; x += spacing) frontRight.push([x, halfD]);
+        buildFenceSide(frontRight);
+
+        // Left side (x = -halfW) — between back and front
+        const leftPoints = [];
+        for (let z = -halfD + spacing; z < halfD; z += spacing) leftPoints.push([-halfW, z]);
+        buildFenceSide(leftPoints);
+
+        // Right side (x = halfW) — between back and front
+        const rightPoints = [];
+        for (let z = -halfD + spacing; z < halfD; z += spacing) rightPoints.push([halfW, z]);
+        buildFenceSide(rightPoints);
+
+        // Gate posts (thicker)
+        const gatePostGeo = new THREE.CylinderGeometry(0.1, 0.12, 1.3, 8);
+        [-1.2, 1.2].forEach(gx => {
+            const gp = new THREE.Mesh(gatePostGeo, darkWoodMat);
+            gp.position.set(gx, 0.65, halfD);
+            gp.castShadow = true;
+            gp.receiveShadow = true;
+            fenceGroup.add(gp);
+            const gpTop = new THREE.Mesh(
+                new THREE.SphereGeometry(0.12, 8, 4),
+                darkWoodMat
+            );
+            gpTop.position.set(gx, 1.32, halfD);
+            gpTop.castShadow = true;
+            fenceGroup.add(gpTop);
+        });
+
+        scene.add(fenceGroup);
+
+        // ──────────────────────────────────
+        // CROP BEDS
+        // ──────────────────────────────────
+        const cropGroups = []; // for wind animation
+
+        function createCornStalk() {
+            const group = new THREE.Group();
+            const stalk = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.04, 0.06, 1.0, 6),
+                cornMat
+            );
+            stalk.position.y = 0.5;
+            stalk.castShadow = true;
+            group.add(stalk);
+
+            // Leaves
+            for (let i = 0; i < 3; i++) {
+                const leaf = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.015, 0.25, 0.015),
+                    cornMat
+                );
+                leaf.position.y = 0.3 + i * 0.25;
+                leaf.rotation.z = (0.5 + i * 0.3) * (i % 2 === 0 ? 1 : -1);
+                leaf.rotation.x = 0.2;
+                leaf.castShadow = true;
+                group.add(leaf);
+            }
+            return group;
+        }
+
+        function createWheat() {
+            const group = new THREE.Group();
+            const stem = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.02, 0.03, 0.5, 4),
+                new THREE.MeshStandardMaterial({ color: 0x6B8E23, roughness: 0.8 })
+            );
+            stem.position.y = 0.25;
+            stem.castShadow = true;
+            group.add(stem);
+
+            const head = new THREE.Mesh(
+                new THREE.ConeGeometry(0.06, 0.2, 4),
+                wheatMat
+            );
+            head.position.y = 0.6;
+            head.castShadow = true;
+            group.add(head);
+            return group;
+        }
+
+        function createPumpkin() {
+            const group = new THREE.Group();
+            const body = new THREE.Mesh(
+                new THREE.SphereGeometry(0.12, 8, 6),
+                pumpkinMat
+            );
+            body.scale.set(1, 0.6, 1);
+            body.position.y = 0.07;
+            body.castShadow = true;
+            body.receiveShadow = true;
+            group.add(body);
+
+            const stem = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.02, 0.03, 0.1, 5),
+                new THREE.MeshStandardMaterial({ color: 0x228B22, roughness: 0.8 })
+            );
+            stem.position.y = 0.16;
+            stem.castShadow = true;
+            group.add(stem);
+            return group;
+        }
+
+        function createCropBed(cx, cz, type, rows, cols) {
+            const bedGroup = new THREE.Group();
+            bedGroup.userData.cropType = type;
+
+            const spacingX = type === 'pumpkin' ? 0.5 : 0.25;
+            const spacingZ = type === 'pumpkin' ? 0.5 : 0.25;
+            const offsetX = (cols - 1) * spacingX / 2;
+            const offsetZ = (rows - 1) * spacingZ / 2;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    let plant;
+                    if (type === 'corn') plant = createCornStalk();
+                    else if (type === 'wheat') plant = createWheat();
+                    else plant = createPumpkin();
+
+                    plant.position.x = c * spacingX - offsetX + (Math.random() - 0.5) * 0.08;
+                    plant.position.z = r * spacingZ - offsetZ + (Math.random() - 0.5) * 0.08;
+                    plant.rotation.z = (Math.random() - 0.5) * 0.3;
+                    bedGroup.add(plant);
+                }
+            }
+
+            // Soil base
+            const soilGeo = new THREE.BoxGeometry(cols * spacingX + 0.2, 0.05, rows * spacingZ + 0.2);
+            const soil = new THREE.Mesh(
+                soilGeo,
+                new THREE.MeshStandardMaterial({ color: 0x5C4033, roughness: 0.95, metalness: 0.0 })
+            );
+            soil.position.y = -0.03;
+            soil.receiveShadow = true;
+            bedGroup.add(soil);
+
+            bedGroup.position.set(cx, 0.02, cz);
+            cropGroups.push(bedGroup);
+            return bedGroup;
+        }
+
+        // Layout crop beds in the right-front area of the farm
+        const cropBeds = [
+            { x: 3, z: 3.5, type: 'corn', rows: 3, cols: 6 },
+            { x: 5.5, z: 3.5, type: 'wheat', rows: 4, cols: 8 },
+            { x: 3, z: 5.5, type: 'pumpkin', rows: 2, cols: 4 },
+            { x: 5.5, z: 5.5, type: 'corn', rows: 3, cols: 6 },
+            { x: 4.25, z: 7.5, type: 'wheat', rows: 4, cols: 8 },
+            { x: -3, z: 4, type: 'wheat', rows: 4, cols: 8 },
+            { x: -5.5, z: 4, type: 'corn', rows: 3, cols: 6 },
+            { x: -4.25, z: 6, type: 'pumpkin', rows: 2, cols: 4 },
+        ];
+
+        cropBeds.forEach(bed => {
+            scene.add(createCropBed(bed.x, bed.z, bed.type, bed.rows, bed.cols));
+        });
+
+        // ──────────────────────────────────
+        // WATER TROUGH
+        // ──────────────────────────────────
+        const troughGroup = new THREE.Group();
+        const troughBody = new THREE.Mesh(
+            new THREE.BoxGeometry(1.5, 0.3, 0.6),
+            woodMat
+        );
+        troughBody.position.y = 0.3;
+        troughBody.castShadow = true;
+        troughBody.receiveShadow = true;
+        troughGroup.add(troughBody);
+
+        // Water surface
+        const waterGeo = new THREE.BoxGeometry(1.3, 0.02, 0.45);
+        const water = new THREE.Mesh(
+            waterGeo,
+            new THREE.MeshStandardMaterial({ color: 0x4488CC, roughness: 0.2, metalness: 0.3, transparent: true, opacity: 0.7 })
+        );
+        water.position.y = 0.44;
+        troughGroup.add(water);
+
+        troughGroup.position.set(3.5, 0, -4.5);
+        scene.add(troughGroup);
+
+        // ──────────────────────────────────
+        // CLOUDS
+        // ──────────────────────────────────
+        const cloudGroups = [];
+
+        function createCloud(cx, cy, cz, size) {
+            const cloudGroup = new THREE.Group();
+            const sphereGeo = new THREE.SphereGeometry(1, 8, 6);
+
+            const offsets = [
+                [0, 0, 0, 1.0],
+                [0.7, 0.15, 0.2, 0.8],
+                [-0.7, 0.1, 0.1, 0.85],
+                [0.35, 0.25, -0.5, 0.7],
+                [-0.35, 0.2, -0.45, 0.75],
+                [0.0, -0.15, 0.6, 0.65],
+            ];
+
+            offsets.forEach(([ox, oy, oz, s]) => {
+                const blob = new THREE.Mesh(sphereGeo, cloudMat);
+                blob.position.set(ox * size, oy * size, oz * size);
+                blob.scale.set(size * s, size * s * 0.6, size * s);
+                cloudGroup.add(blob);
+            });
+
+            cloudGroup.position.set(cx, cy, cz);
+            cloudGroup.userData.startX = cx;
+            cloudGroup.userData.startZ = cz;
+            cloudGroups.push(cloudGroup);
+            return cloudGroup;
+        }
+
+        const clouds = [
+            [-8, 14, -6, 0.8],
+            [5, 16, -8, 0.9],
+            [-5, 15, 8, 0.7],
+            [8, 13, 5, 0.75],
+            [-9, 14, 3, 0.65],
+            [2, 17, 7, 0.85],
+            [-3, 15, -3, 0.7],
+        ];
+
+        clouds.forEach(([x, y, z, s]) => {
+            scene.add(createCloud(x, y, z, s));
+        });
+
+        // ──────────────────────────────────
+        // BIRDS (simple V shapes)
+        // ──────────────────────────────────
+        const birdGroup = new THREE.Group();
+        const birdGeo = new THREE.ConeGeometry(0.08, 0.05, 4);
+        const birdMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5 });
+
+        for (let i = 0; i < 6; i++) {
+            const bird = new THREE.Mesh(birdGeo, birdMat);
+            bird.rotation.z = Math.PI / 2;
+            bird.position.set(
+                -10 + Math.random() * 20,
+                10 + Math.random() * 8,
+                -8 + Math.random() * 16
+            );
+            bird.castShadow = true;
+            bird.userData.speed = 0.5 + Math.random() * 1.5;
+            bird.userData.radius = 3 + Math.random() * 8;
+            bird.userData.phase = Math.random() * Math.PI * 2;
+            bird.userData.baseY = bird.position.y;
+            birdGroup.add(bird);
+        }
+        scene.add(birdGroup);
+
+        // ──────────────────────────────────
+        // ANIMATION LOOP
+        // ──────────────────────────────────
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = clock.getElapsedTime();
+            controls.update();
+
+            // Wind effect on crops
+            cropGroups.forEach((bed, bedIdx) => {
+                bed.children.forEach((plant, plantIdx) => {
+                    if (plant.isMesh) return; // skip soil base
+                    const phase = bedIdx * 0.7 + plantIdx * 0.15;
+                    const sway = Math.sin(time * 1.5 + phase) * 0.06;
+                    plant.rotation.z += (sway - plant.rotation.z) * 0.1;
+                    if (bed.userData.cropType !== 'pumpkin') {
+                        plant.rotation.x += (Math.cos(time * 1.5 + phase) * 0.04 - plant.rotation.x) * 0.1;
+                    }
+                });
+            });
+
+            // Cloud drift
+            cloudGroups.forEach((cloud, i) => {
+                cloud.position.x = cloud.userData.startX + Math.sin(time * 0.1 + i) * 4;
+                cloud.position.z = cloud.userData.startZ + Math.cos(time * 0.08 + i) * 2;
+            });
+
+            // Bird flight
+            birdGroup.children.forEach(bird => {
+                const angle = time * bird.userData.speed + bird.userData.phase;
+                bird.position.x += Math.cos(angle * 0.7) * 0.01;
+                bird.position.z += Math.sin(angle * 0.7) * 0.01;
+                bird.position.y = bird.userData.baseY + Math.sin(angle * 0.5) * 0.5;
+                bird.rotation.y = angle * 0.7;
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        // ──────────────────────────────────
+        // RESIZE HANDLER
+        // ──────────────────────────────────
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ──────────────────────────────────
+        // START
+        // ──────────────────────────────────
+        animate();
+        console.log('Farm is ready! Drag to orbit, scroll to zoom.');
+    </script>
+</body>
+</html>
